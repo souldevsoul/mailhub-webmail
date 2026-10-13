@@ -2865,6 +2865,24 @@ export function MailApp({ linkSegments: routeSegments }: MailAppProps = {}) {
     }
   };
 
+  // MailHub: a login that reads shared domain inboxes opens on All inboxes, not
+  // on its own (usually empty) inbox. Once only, and never over a folder the URL
+  // or history already chose.
+  const openedAllInboxesRef = useRef(false);
+  useEffect(() => {
+    if (openedAllInboxesRef.current || !client || !selectedMailbox) return;
+    if (!enableUnifiedMailbox || !includeGroupInUnified) return;
+    const ownInbox = mailboxes.find((m) => m.role === 'inbox' && !m.isShared);
+    if (!ownInbox || selectedMailbox !== ownInbox.id) {
+      openedAllInboxesRef.current = true;
+      return;
+    }
+    if (!mailboxes.some((m) => m.isShared && m.role === 'inbox')) return;
+    openedAllInboxesRef.current = true;
+    void handleMailboxSelect(UNIFIED_MAILBOX_IDS.inbox);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on load state only
+  }, [client, mailboxes, selectedMailbox, enableUnifiedMailbox, includeGroupInUnified]);
+
   const handleTagSelect = async (keywordId: string | null) => {
     setScheduledView(false);
     selectKeyword(keywordId);

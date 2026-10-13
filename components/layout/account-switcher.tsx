@@ -321,7 +321,7 @@ export function AccountSwitcher({
                     {currentMailbox ? currentMailbox.label : displayName}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {currentMailbox
+                    {currentMailbox && currentMailbox.kind === "shared"
                       ? (currentMailbox.sublabel || t("switch_shared_inbox"))
                       : displayEmail}
                   </p>

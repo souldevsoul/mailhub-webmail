@@ -62,6 +62,14 @@ describe('AccountSwitcher mailbox list', () => {
     expect(label).toHaveTextContent('inbox@cobalt.boutique');
   });
 
+  it('shows All inboxes with the login address underneath', () => {
+    render(<AccountSwitcher variant="expanded" mailboxOptions={options} selectedMailbox="unified-inbox" onSelectMailbox={vi.fn()} />);
+    const label = screen.getByTestId('account-switcher-label');
+    expect(label).toHaveTextContent('All inboxes');
+    expect(label).toHaveTextContent('admin1@pact.email');
+    expect(label).not.toHaveTextContent('Shared inbox');
+  });
+
   it('keeps the account identity in the trigger for the own inbox', () => {
     render(<AccountSwitcher variant="expanded" mailboxOptions={options} selectedMailbox="own-inbox" onSelectMailbox={vi.fn()} />);
     expect(screen.getByTestId('account-switcher-label')).toHaveTextContent('admin1@pact.email');
