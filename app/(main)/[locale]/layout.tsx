@@ -14,6 +14,7 @@ import { PluginConsentDialog } from "@/components/plugins/plugin-consent-dialog"
 import { PluginOAuthCallbackListener } from "@/components/providers/plugin-oauth-callback-listener";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { PushNotificationPrompt } from "@/components/push-notification-prompt";
+import { RequireTotpGate } from "@/components/auth/require-totp-gate";
 import { setRequestLocale } from "next-intl/server";
 import { locales } from "@/i18n/routing";
 import { generateLiteLocaleParams } from "@/lib/lite-static-params";
@@ -53,6 +54,7 @@ export default async function LocaleLayout({
               <TourProvider>
                 <ProtocolLaunchHandlerProvider>
                   <ProInterfaceRedirect />
+                  <RequireTotpGate />
                   <ImpersonationReconciler />
                   {children}
                   <PluginDialogHost />

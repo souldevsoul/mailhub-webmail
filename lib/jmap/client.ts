@@ -1162,6 +1162,15 @@ export class JMAPClient implements IJMAPClient {
     this.authHeader = basicAuthHeader(this.username, newPassword);
   }
 
+  /**
+   * Stalwart account-management methods (x:AccountPassword, x:AppPassword, ...)
+   * sent with this session's own credentials. The static Lite build has no
+   * server-side passthrough, so it calls the server directly.
+   */
+  async stalwartRequest(methodCalls: JMAPMethodCall[]): Promise<JMAPResponse> {
+    return this.request(methodCalls, ['urn:ietf:params:jmap:core', 'urn:stalwart:jmap']);
+  }
+
   getAuthHeader(): string {
     return this.authHeader;
   }

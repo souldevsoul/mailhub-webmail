@@ -55,8 +55,9 @@ export const LITE_FORCED_FLAGS = {
   oauthOnly: false,
   autoSsoEnabled: false,
   settingsSyncEnabled: false,
-  stalwartFeaturesEnabled: false,
-  stalwartJmapPassthroughEnabled: false,
+  // MailHub: account security (2FA, app passwords) talks to Stalwart directly.
+  stalwartFeaturesEnabled: true,
+  stalwartJmapPassthroughEnabled: true,
   devMode: false,
 } as const satisfies Partial<ConfigData>;
 

@@ -39,9 +39,27 @@ export async function stalwartJmap(
   options: StalwartJmapOptions = {},
 ): Promise<JmapMethodResponse[]> {
   if (IS_LITE) {
-    // The static build has no server to hold the credentials; behave exactly
-    // like a deployment with the passthrough switched off (#904).
-    throw buildError('Stalwart management passthrough is not available in the static build', 404);
+    // The static build has no server to hold the credentials, so it sends the
+    // call straight to Stalwart with the session's own token.
+    const { useAuthStore } = await import('@/stores/auth-store');
+    const client = useAuthStore.getState().client;
+    // The demo client has no Stalwart behind it; treat that like a missing passthrough.
+    const direct = client as unknown as {
+      stalwartRequest?: (calls: JmapMethodCall[]) => Promise<{ methodResponses?: unknown[] }>;
+    } | null;
+    if (!direct) throw buildError('Not authenticated', 401);
+    if (!direct.stalwartRequest) throw buildError('Stalwart management is not available', 404);
+    const data = await direct.stalwartRequest(methodCalls);
+    const responses = (data.methodResponses ?? []) as unknown as JmapMethodResponse[];
+    const first = responses[0];
+    if (first && first[0] === 'error') {
+      const result = first[1] as { type?: string; description?: string };
+      throw buildError(result.description || result.type || 'JMAP error', 200, {
+        type: result.type || 'unknown',
+        description: result.description,
+      });
+    }
+    return responses;
   }
   const slotHeaders = typeof options.slot === 'number'
     ? { 'X-JMAP-Cookie-Slot': String(options.slot) }

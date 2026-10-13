@@ -1794,6 +1794,16 @@
         "disable_confirm_prompt": "二要素認証を無効にするにはパスワードを入力してください。",
         "password_required": "パスワードが必要です",
         "code_required": "確認コードが必要です",
+        "gate_title": "Set up two-factor authentication",
+        "gate_body": "Your account needs a second sign-in step before you can use mail. It takes a minute.",
+        "gate_step_scan": "1. Scan this QR code with an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy).",
+        "gate_step_manual": "Can't scan? Enter this key in the app instead:",
+        "gate_step_code": "2. Enter the 6-digit code the app shows, and your password.",
+        "gate_password": "Password",
+        "gate_submit": "Turn on 2FA",
+        "gate_sign_out": "Sign out",
+        "gate_apps_note": "After this, mail apps on your phone or computer need an app password from Settings > Security.",
+        "gate_loading": "Checking your account security...",
         "code_invalid": "確認コードが無効です。認証アプリを確認してもう一度お試しください。"
       },
       "app_passwords": {

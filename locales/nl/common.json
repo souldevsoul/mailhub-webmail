@@ -1794,6 +1794,16 @@
         "disable_confirm_prompt": "Voer uw wachtwoord in om tweefactorauthenticatie uit te schakelen.",
         "password_required": "Wachtwoord is vereist",
         "code_required": "Verificatiecode is vereist",
+        "gate_title": "Set up two-factor authentication",
+        "gate_body": "Your account needs a second sign-in step before you can use mail. It takes a minute.",
+        "gate_step_scan": "1. Scan this QR code with an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy).",
+        "gate_step_manual": "Can't scan? Enter this key in the app instead:",
+        "gate_step_code": "2. Enter the 6-digit code the app shows, and your password.",
+        "gate_password": "Password",
+        "gate_submit": "Turn on 2FA",
+        "gate_sign_out": "Sign out",
+        "gate_apps_note": "After this, mail apps on your phone or computer need an app password from Settings > Security.",
+        "gate_loading": "Checking your account security...",
         "code_invalid": "Ongeldige verificatiecode. Controleer uw authenticator-app en probeer het opnieuw."
       },
       "app_passwords": {
