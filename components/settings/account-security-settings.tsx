@@ -1440,9 +1440,9 @@ export function AccountSecuritySettings() {
   // OAuth and access-token sign-ins hold no password to change, and mail
   // apps need an app password instead.
   const withoutPassword = authMode === 'oauth' || authMode === 'token';
-  // Lite's password form signs in with a token minted from the password, so
-  // the account still has a password and can manage its own 2FA.
-  const canManageOtp = !withoutPassword || (IS_LITE && authMode === 'token');
+  // Lite's password form signs in with Stalwart OAuth tokens minted from the
+  // password, so the account still has a password and manages its own 2FA.
+  const canManageOtp = !withoutPassword || IS_LITE;
 
   // Wait for `client` before probing. On reload the persisted `isAuthenticated`
   // flips true before the async OAuth reconnect sets `client`; probing in that

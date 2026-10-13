@@ -54,6 +54,13 @@ describe('RequireTotpGate', () => {
     expect(screen.queryByTestId('totp-gate')).toBeNull();
   });
 
+  it('exempts OAuth sessions outside Lite', async () => {
+    useAuthStore.setState({ authMode: 'oauth' } as never);
+    render(<RequireTotpGate />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('totp-gate')).toBeNull();
+  });
+
   it('does not apply to a signed-out visitor', () => {
     useAuthStore.setState({ isAuthenticated: false, client: null } as never);
     render(<RequireTotpGate />);

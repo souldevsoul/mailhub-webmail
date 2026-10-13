@@ -26,9 +26,11 @@ export function RequireTotpGate() {
   const [checked, setChecked] = useState(false);
   const [checkFailed, setCheckFailed] = useState(false);
 
-  // OAuth (external identity provider) and bare access tokens hold no password
-  // Stalwart could check; their second factor belongs to that provider.
-  const appliesToSession = authMode === "basic" || (IS_LITE && authMode === "token");
+  // Lite's password form ends in Stalwart's own OAuth tokens, so in Lite every
+  // mode is a Stalwart password account (MailHub has no external identity
+  // provider). The regular build exempts OAuth/token sessions, whose second
+  // factor belongs to the provider.
+  const appliesToSession = IS_LITE || authMode === "basic";
 
   useEffect(() => {
     if (!isAuthenticated || !client || !appliesToSession) return;
