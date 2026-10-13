@@ -70,7 +70,7 @@ import { useSettingsStore, getKeywordVisibility } from "@/stores/settings-store"
 import { useEmailStore } from "@/stores/email-store";
 import { toast } from "@/stores/toast-store";
 import { debug } from "@/lib/debug";
-import { AccountSwitcher } from "./account-switcher";
+import { AccountSwitcher, type SwitcherMailbox } from "./account-switcher";
 import { useIsEmbedded } from "@/hooks/use-is-embedded";
 import { buildSettingsPath, SCHEDULED_MAILBOX_ID, scopedScheduledMailboxId } from "@/lib/deep-links";
 import { useTour } from "@/components/tour/tour-provider";
@@ -1056,6 +1056,44 @@ export function Sidebar({
   const ownTree = mailboxTree.filter(n => !n.id.startsWith('shared-account-') && !isServerScheduledNode(n));
   const sharedAccounts = mailboxTree.filter(n => n.id.startsWith('shared-account-'));
 
+  // MailHub: the top switcher lists every inbox this login can read - all of
+  // them merged, its own, and each shared domain inbox - so a domain is one
+  // click away instead of buried under "Shared" in the folder list.
+  const findInbox = (nodes: MailboxNode[]): MailboxNode | undefined => {
+    for (const n of nodes) {
+      if (n.role === 'inbox') return n;
+      const hit = findInbox(n.children);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  const switcherMailboxes: SwitcherMailbox[] = [];
+  if (showUnified) {
+    switcherMailboxes.push({
+      id: UNIFIED_MAILBOX_IDS.inbox,
+      label: t("switch_all_inboxes"),
+      unread: unifiedCounts.find(c => c.role === 'inbox')?.unreadEmails,
+      kind: "all",
+    });
+  }
+  const ownInbox = ownTree.find(n => n.role === 'inbox');
+  if (ownInbox) {
+    switcherMailboxes.push({ id: ownInbox.id, label: t("switch_my_inbox"), unread: ownInbox.unreadEmails, kind: "own" });
+  }
+  for (const account of sharedAccounts) {
+    const inbox = findInbox(account.children);
+    if (!inbox) continue;
+    const name = account.accountName || account.name;
+    const at = name.lastIndexOf('@');
+    switcherMailboxes.push({
+      id: inbox.id,
+      label: at > 0 ? name.slice(at + 1) : name,
+      sublabel: name,
+      unread: inbox.unreadEmails,
+      kind: "shared",
+    });
+  }
+
   // Mountain View's navigation is one flat list of the few places mail
   // actually goes, with everything else - the folders you made, the shared
   // ones, the labels - behind a single "More". The "Folders" and "Tags"
@@ -1326,7 +1364,13 @@ export function Sidebar({
             </Button>
 
             {!isCollapsed && !hideAccountSwitcher && (
-              <AccountSwitcher variant="expanded" className="flex-1" />
+              <AccountSwitcher
+                variant="expanded"
+                className="flex-1"
+                mailboxOptions={switcherMailboxes}
+                selectedMailbox={selectedKeyword ? undefined : selectedMailbox}
+                onSelectMailbox={onMailboxSelect}
+              />
             )}
           </div>
         </div>

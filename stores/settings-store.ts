@@ -779,7 +779,7 @@ const DEFAULT_SETTINGS = {
   proInterface: false,
 
   // Unified Mailbox
-  enableUnifiedMailbox: false,
+  enableUnifiedMailbox: true,
   includeGroupInUnified: true,
   unifiedCrossAccount: false,
 
@@ -1412,7 +1412,7 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: 'settings-storage',
-      version: 7,
+      version: 8,
       migrate: migrateSettings,
       onRehydrateStorage: () => {
         return (state) => {
@@ -1503,6 +1503,11 @@ export function migrateSettings(persisted: unknown, version: number): SettingsSt
         // already received it via main's v6 bump keep their populated map.
         if (version < 6 || !isPlainRecord(state.preferredIdentityIds)) {
           state.preferredIdentityIds = {};
+        }
+        // MailHub: every login sees its domain inboxes merged in one list.
+        if (version < 8) {
+          state.enableUnifiedMailbox = true;
+          state.includeGroupInUnified = true;
         }
         return state as unknown as SettingsState;
 }

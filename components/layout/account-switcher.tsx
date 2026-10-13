@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
-import { Check, Plus, LogOut, Mails, Star, ChevronDown, AlertCircle, GripVertical, X, Settings, Cloud } from "@/components/icons";
+import { Check, Plus, LogOut, Mails, Star, ChevronDown, AlertCircle, GripVertical, X, Settings, Cloud, Inbox, Users } from "@/components/icons";
 import { useTranslations } from "next-intl";
 import type { Mailbox } from "@/lib/jmap/types";
 import { useAccountStore, type AccountEntry } from "@/stores/account-store";
@@ -18,6 +18,15 @@ import { Avatar } from "@/components/ui/avatar";
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
 import { toUnicodeDomain, toUnicodeEmail } from "@/lib/idn";
 
+/** A mailbox the switcher can jump to: the login's own inbox, a shared domain inbox, or all of them. */
+export interface SwitcherMailbox {
+  id: string;
+  label: string;
+  sublabel?: string;
+  unread?: number;
+  kind: "all" | "own" | "shared";
+}
+
 interface AccountSwitcherProps {
   /** "rail" = small avatar only (NavigationRail), "expanded" = avatar + name + email (Sidebar) */
   variant?: "rail" | "expanded" | "header";
@@ -31,6 +40,11 @@ interface AccountSwitcherProps {
   onSelectAllInboxes?: () => void;
   /** Whether that merged list is the one currently on screen. */
   allInboxesSelected?: boolean;
+  /** MailHub: inboxes listed in the popover (all inboxes, own inbox, shared domain inboxes). */
+  mailboxOptions?: SwitcherMailbox[];
+  /** Currently selected mailbox id, so the trigger can name the inbox on screen. */
+  selectedMailbox?: string;
+  onSelectMailbox?: (mailboxId: string) => void;
 }
 
 function AccountAvatar({ account, size = "sm" }: { account: AccountEntry; size?: "sm" | "md" | "xl" }) {
@@ -65,6 +79,9 @@ export function AccountSwitcher({
   className,
   onSelectAllInboxes,
   allInboxesSelected = false,
+  mailboxOptions,
+  selectedMailbox,
+  onSelectMailbox,
 }: AccountSwitcherProps) {
   const t = useTranslations("sidebar");
   const router = useRouter();
@@ -244,6 +261,17 @@ export function AccountSwitcher({
   const displayName = toUnicodeEmail(activeAccount?.displayName || activeAccount?.label || "");
   const displayEmail = toUnicodeEmail(activeAccount?.email || activeAccount?.username || "");
 
+  // The trigger names the inbox on screen when it is a shared or merged one, so
+  // switching domains from the top is visible without opening the sidebar.
+  const showMailboxes = !mvPopover && !!onSelectMailbox && (mailboxOptions?.length ?? 0) > 1;
+  const currentMailbox = showMailboxes
+    ? mailboxOptions!.find((m) => m.id === selectedMailbox && m.kind !== "own")
+    : undefined;
+  const handleSelectMailbox = (id: string) => {
+    setOpen(false);
+    onSelectMailbox?.(id);
+  };
+
   // Mountain View leads its popover with the account you are already in - large avatar,
   // name, address - and lists only the others underneath, since choosing one is
   // the point of opening it. Every row carries the unread waiting there, so the
@@ -288,9 +316,15 @@ export function AccountSwitcher({
             <AccountAvatar account={activeAccount} size={variant === "expanded" ? "md" : "sm"} />
             {variant === "expanded" && (
               <>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
+                <div className="min-w-0 flex-1" data-testid="account-switcher-label">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {currentMailbox ? currentMailbox.label : displayName}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {currentMailbox
+                      ? (currentMailbox.sublabel || t("switch_shared_inbox"))
+                      : displayEmail}
+                  </p>
                 </div>
                 <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform", open && "rotate-180")} />
               </>
@@ -536,6 +570,45 @@ export function AccountSwitcher({
                 </div>
               )}
             </>
+          )}
+
+          {showMailboxes && (
+            <div className="border-t border-border py-1" data-testid="mailbox-switcher">
+              <p className="px-3 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("switch_mailbox_heading")}
+              </p>
+              <div className="max-h-72 overflow-y-auto">
+                {mailboxOptions!.map((mb) => {
+                  const isSelected = mb.id === selectedMailbox;
+                  const Icon = mb.kind === "all" ? Mails : mb.kind === "shared" ? Users : Inbox;
+                  return (
+                    <button
+                      key={mb.id}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={isSelected}
+                      data-testid="mailbox-option"
+                      data-mailbox-id={mb.id}
+                      data-mailbox-kind={mb.kind}
+                      onClick={() => handleSelectMailbox(mb.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2 text-start transition-colors",
+                        isSelected ? "bg-accent/50" : "hover:bg-muted"
+                      )}
+                    >
+                      <Icon className={cn("w-4 h-4 flex-shrink-0", isSelected ? "text-primary" : "text-muted-foreground")} />
+                      <span className="min-w-0 flex-1">
+                        <span className={cn("block text-sm truncate", isSelected && "font-medium")}>{mb.label}</span>
+                        {mb.sublabel && (
+                          <span className="block text-[11px] text-muted-foreground truncate">{mb.sublabel}</span>
+                        )}
+                      </span>
+                      <UnreadBadge count={mb.unread} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* Separator + Add Account */}
