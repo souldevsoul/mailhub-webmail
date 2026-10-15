@@ -74,6 +74,18 @@ describe('mailbox tags', () => {
     expect(untagged.sets).toHaveLength(0);
   });
 
+  it('cleans up a duplicate tag file left by two members tagging at once', async () => {
+    const { client, sets } = fakeServer({ m: '{"tag":"business"}' });
+    (client.filesRequest as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({
+      methodResponses: [['FileNode/get', { list: [
+        { id: 'n0', name: MAILBOX_TAG_FILE, parentId: null, blobId: 'b-m' },
+        { id: 'n9', name: MAILBOX_TAG_FILE, parentId: null, blobId: 'b-m2' },
+      ] }, 'g0']],
+    }));
+    await saveMailboxTag(client, 'm', 'project');
+    expect(sets[0][1]).toMatchObject({ update: { n0: { blobId: 'up-{"tag":"project"}' } }, destroy: ['n9'] });
+  });
+
   it('reports a refused save', async () => {
     const { client } = fakeServer({});
     (client.filesRequest as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({ methodResponses: [['FileNode/get', { list: [] }, 'g0']] }))

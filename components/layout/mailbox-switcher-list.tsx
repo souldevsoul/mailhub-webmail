@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Briefcase, Check, Inbox, Loader2, Mails, Rocket, Tag, Users } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -46,8 +46,6 @@ interface MailboxSwitcherListProps {
   options: SwitcherMailbox[];
   selectedMailbox?: string;
   onSelect: (mailboxId: string) => void;
-  /** Whether the popover is open; opening it re-reads tags other members may have changed. */
-  open: boolean;
 }
 
 /**
@@ -55,8 +53,9 @@ interface MailboxSwitcherListProps {
  * first; the shared domain inboxes follow, grouped under Business, Projects and
  * (when some are tagged) Other. Every shared row has a tag button that opens a
  * small Business / Project / No tag choice in place.
+ * Mounted only while the account popover is open.
  */
-export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }: MailboxSwitcherListProps) {
+export function MailboxSwitcherList({ options, selectedMailbox, onSelect }: MailboxSwitcherListProps) {
   const t = useTranslations("sidebar");
   const tags = useMailboxTagStore((s) => s.tags);
   const saving = useMailboxTagStore((s) => s.saving);
@@ -64,20 +63,32 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }
   const setTag = useMailboxTagStore((s) => s.setTag);
   const [editing, setEditing] = useState<string | null>(null);
 
-  const sharedAccountIds = useMemo(
-    () => options.filter((o) => o.kind === "shared" && o.accountId).map((o) => o.accountId!),
-    [options],
-  );
-  const accountsKey = sharedAccountIds.join(",");
+  const chooserId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
+  // Row whose tag button gets focus back once its choice closes. The row may
+  // have moved to another group by then, so it is found again after render.
+  const refocus = useRef<string | null>(null);
+
+  // Mounted when the popover opens: re-read, picking up tags other members set.
   useEffect(() => {
-    if (sharedAccountIds.length) void loadTags(sharedAccountIds);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the id list's contents
-  }, [accountsKey, loadTags]);
-  useEffect(() => {
-    if (open && sharedAccountIds.length) void loadTags(sharedAccountIds, { force: true });
-    if (!open) setEditing(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-read only when the popover opens
-  }, [open]);
+    const ids = options.filter((o) => o.kind === "shared" && o.accountId).map((o) => o.accountId!);
+    if (ids.length) void loadTags(ids, { force: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!refocus.current || editing) return;
+    const button = listRef.current?.querySelector<HTMLElement>(
+      `[data-testid="mailbox-row"][data-mailbox-id="${CSS.escape(refocus.current)}"] [data-testid="mailbox-tag-button"]`,
+    );
+    refocus.current = null;
+    button?.focus();
+  });
+
+  const closeChooser = (option: SwitcherMailbox) => {
+    refocus.current = option.id;
+    setEditing(null);
+  };
 
   const top = options.filter((o) => o.kind !== "shared");
   const shared = options.filter((o) => o.kind === "shared");
@@ -92,7 +103,7 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }
     : [{ key: "shared", heading: t("mailbox_group_domains"), items: shared }];
 
   const chooseTag = async (option: SwitcherMailbox, tag: MailboxTag | null) => {
-    setEditing(null);
+    closeChooser(option);
     if (!option.accountId || (tagOf(option) ?? null) === tag) return;
     try {
       await setTag(option.accountId, tag);
@@ -132,8 +143,8 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }
             <button
               type="button"
               role="menuitem"
-              aria-haspopup="true"
               aria-expanded={isEditing}
+              aria-controls={isEditing ? chooserId : undefined}
               aria-label={t("mailbox_tag_edit", { mailbox: option.label })}
               title={t("mailbox_tag_edit", { mailbox: option.label })}
               data-testid="mailbox-tag-button"
@@ -143,7 +154,7 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tag
                   ? cn("ring-1 ring-inset", MAILBOX_TAG_STYLE[tag].chip)
-                  : "text-muted-foreground hover:bg-background hover:text-foreground [@media(hover:hover)]:opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+                  : "text-muted-foreground hover:bg-background hover:text-foreground [@media(hover:hover)]:opacity-40 group-hover/row:opacity-100 focus-visible:opacity-100",
                 isEditing && "opacity-100 bg-background text-foreground",
               )}
             >
@@ -153,12 +164,13 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }
         </div>
         {isEditing && (
           <div
+            id={chooserId}
             role="group"
             aria-label={t("mailbox_tag_edit", { mailbox: option.label })}
             data-testid="mailbox-tag-chooser"
             className="flex flex-wrap gap-1.5 bg-muted/60 px-3 py-2"
             onKeyDown={(e) => {
-              if (e.key === "Escape") { e.stopPropagation(); setEditing(null); }
+              if (e.key === "Escape") { e.stopPropagation(); closeChooser(option); }
             }}
           >
             {MAILBOX_TAGS.map((value) => {
@@ -211,11 +223,11 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }
       <p className="px-3 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {t("switch_mailbox_heading")}
       </p>
-      <div className="max-h-[min(34rem,calc(100dvh-13rem))] overflow-y-auto overscroll-contain">
+      <div ref={listRef} className="max-h-[min(34rem,calc(100dvh-13rem))] overflow-y-auto overscroll-contain">
         {top.map(row)}
         {groups.map((group) =>
           group.items.length === 0 ? null : (
-            <section key={group.key} aria-label={group.heading} data-testid={`mailbox-group-${group.key}`}>
+            <div key={group.key} role="group" aria-label={group.heading} data-testid={`mailbox-group-${group.key}`}>
               <p className="flex items-center gap-1.5 px-3 pt-2.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 {(group.key === "business" || group.key === "project") && (
                   <span className={cn("h-1.5 w-1.5 rounded-full", MAILBOX_TAG_STYLE[group.key].dot)} aria-hidden="true" />
@@ -224,7 +236,7 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect, open }
                 <span className="font-normal normal-case tracking-normal tabular-nums">{group.items.length}</span>
               </p>
               {group.items.map(row)}
-            </section>
+            </div>
           ),
         )}
       </div>

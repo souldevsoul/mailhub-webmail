@@ -39,8 +39,11 @@ export function isMailboxTagFile(node: { name?: string | null; parentId?: string
 
 interface TagNode { id: string; blobId: string }
 
-/** The tag file of each account, if it has one. One request for all accounts. */
-async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, TagNode>> {
+/**
+ * The tag files of each account (normally one; two members tagging an untagged
+ * inbox at the same moment can leave two). One request for all accounts.
+ */
+async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, TagNode[]>> {
   if (accountIds.length === 0) return {};
   const calls: MethodCall[] = accountIds.flatMap((accountId, i): MethodCall[] => [
     ['FileNode/query', { accountId, filter: { name: MAILBOX_TAG_FILE } }, `q${i}`],
@@ -51,13 +54,13 @@ async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Pro
     }, `g${i}`],
   ]);
   const response = await client.filesRequest(calls);
-  const found: Record<string, TagNode> = {};
+  const found: Record<string, TagNode[]> = {};
   for (const [name, args, callId] of response.methodResponses ?? []) {
     if (name !== 'FileNode/get' || !callId.startsWith('g')) continue;
     const accountId = accountIds[Number(callId.slice(1))];
     const list = (args.list ?? []) as { id: string; name: string; parentId: string | null; blobId: string }[];
-    const node = list.find(isMailboxTagFile);
-    if (accountId && node) found[accountId] = { id: node.id, blobId: node.blobId };
+    const nodes = list.filter(isMailboxTagFile).map((n) => ({ id: n.id, blobId: n.blobId }));
+    if (accountId && nodes.length) found[accountId] = nodes;
   }
   return found;
 }
@@ -66,7 +69,7 @@ async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Pro
 export async function loadMailboxTags(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, MailboxTag>> {
   const nodes = await findTagNodes(client, accountIds);
   const entries = await Promise.all(
-    Object.entries(nodes).map(async ([accountId, node]) => {
+    Object.entries(nodes).map(async ([accountId, [node]]) => {
       try {
         const blob = await client.fetchBlob(node.blobId, MAILBOX_TAG_FILE, 'application/json', accountId);
         return [accountId, parseMailboxTag(await blob.text())] as const;
@@ -90,16 +93,17 @@ function setResult(response: Awaited<ReturnType<MailboxTagClient['filesRequest']
 
 /** Sets (or with null, removes) the tag of one shared account. */
 export async function saveMailboxTag(client: MailboxTagClient, accountId: string, tag: MailboxTag | null): Promise<void> {
-  const existing = (await findTagNodes(client, [accountId]))[accountId];
+  const [keep, ...extra] = (await findTagNodes(client, [accountId]))[accountId] ?? [];
   if (!tag) {
-    if (!existing) return;
-    setResult(await client.filesRequest([['FileNode/set', { accountId, destroy: [existing.id] }, 's0']]));
+    if (!keep) return;
+    setResult(await client.filesRequest([['FileNode/set', { accountId, destroy: [keep.id, ...extra.map((n) => n.id)] }, 's0']]));
     return;
   }
   const file = new File([JSON.stringify({ tag })], MAILBOX_TAG_FILE, { type: 'application/json' });
   const { blobId } = await client.uploadBlob(file, accountId);
-  const set = existing
-    ? { accountId, update: { [existing.id]: { blobId } } }
+  const set: Record<string, unknown> = keep
+    ? { accountId, update: { [keep.id]: { blobId } } }
     : { accountId, create: { tag: { name: MAILBOX_TAG_FILE, parentId: null, blobId, type: 'application/json' } } };
+  if (extra.length) set.destroy = extra.map((n) => n.id);
   setResult(await client.filesRequest([['FileNode/set', set, 's0']]));
 }

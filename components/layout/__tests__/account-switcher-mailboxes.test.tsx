@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Mailbox } from '@/lib/jmap/types';
 
@@ -12,6 +12,7 @@ const { useAccountStore } = await import('@/stores/account-store');
 const { useAuthStore } = await import('@/stores/auth-store');
 const { useEmailStore } = await import('@/stores/email-store');
 const { useSettingsStore } = await import('@/stores/settings-store');
+const { useMailboxTagStore } = await import('@/stores/mailbox-tag-store');
 
 const options: SwitcherMailbox[] = [
   { id: 'unified-inbox', label: 'All inboxes', unread: 4, kind: 'all' },
@@ -79,5 +80,23 @@ describe('AccountSwitcher mailbox list', () => {
     render(<AccountSwitcher variant="expanded" />);
     fireEvent.click(screen.getByTestId('account-switcher'));
     expect(screen.queryByTestId('mailbox-switcher')).toBeNull();
+  });
+
+  it('loads the inbox tags with the page and shows the tag of the inbox on screen', () => {
+    const load = vi.fn();
+    useAuthStore.setState({ client: {} } as never);
+    useMailboxTagStore.setState({ tags: { m: 'project' }, load });
+    const tagged = options.map((o) => (o.id === 'cobalt-inbox' ? { ...o, accountId: 'm' } : o));
+    render(<AccountSwitcher variant="expanded" mailboxOptions={tagged} selectedMailbox="cobalt-inbox" onSelectMailbox={vi.fn()} />);
+    expect(load).toHaveBeenCalledWith(['m']);
+    expect(screen.getByTestId('account-switcher-tag')).toHaveAttribute('data-tag', 'project');
+  });
+
+  it('forgets the tags when the session changes', () => {
+    useAuthStore.setState({ client: {} } as never);
+    useMailboxTagStore.setState({ tags: { m: 'project' }, load: vi.fn() });
+    render(<AccountSwitcher variant="expanded" mailboxOptions={options} selectedMailbox="own-inbox" onSelectMailbox={vi.fn()} />);
+    act(() => { useAuthStore.setState({ client: null } as never); });
+    expect(useMailboxTagStore.getState().tags).toEqual({});
   });
 });

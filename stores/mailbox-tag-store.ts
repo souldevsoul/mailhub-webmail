@@ -6,8 +6,8 @@ import { isMailboxTagClient, loadMailboxTags, saveMailboxTag, type MailboxTag } 
 interface MailboxTagState {
   /** Shared account id -> tag. Untagged accounts are absent. */
   tags: Record<string, MailboxTag>;
-  /** Account ids whose tag change is still being saved. */
-  saving: Record<string, boolean>;
+  /** Account id -> number of tag changes still being saved. */
+  saving: Record<string, number>;
   /** The account set the tags were last loaded for (sorted, joined). */
   loadedFor: string | null;
   /** Loads once per account set; `force` re-reads, picking up changes other members made. */
@@ -17,6 +17,11 @@ interface MailboxTagState {
 }
 
 const keyOf = (accountIds: string[]) => [...accountIds].sort().join(',');
+const withTag = (tags: Record<string, MailboxTag>, accountId: string, tag: MailboxTag | null | undefined) => {
+  const next = { ...tags };
+  if (tag) next[accountId] = tag; else delete next[accountId];
+  return next;
+};
 
 export const useMailboxTagStore = create<MailboxTagState>()((set, get) => ({
   tags: {},
@@ -27,15 +32,20 @@ export const useMailboxTagStore = create<MailboxTagState>()((set, get) => ({
     const client = useAuthStore.getState().client;
     const key = keyOf(accountIds);
     if (!isMailboxTagClient(client) || (get().loadedFor === key && !options?.force)) return;
-    // A change still being saved would be overwritten by the older server copy.
-    if (Object.keys(get().saving).length > 0) return;
     set({ loadedFor: key });
     try {
-      const tags = await loadMailboxTags(client, accountIds);
-      // Skipped when a change was made meanwhile: the read may predate it.
-      if (get().loadedFor === key && Object.keys(get().saving).length === 0) set({ tags });
+      const loaded = await loadMailboxTags(client, accountIds);
+      if (get().loadedFor !== key) return;
+      // A change saved meanwhile is newer than this read: keep the local value for it.
+      const saving = get().saving;
+      const tags = { ...loaded };
+      for (const accountId of Object.keys(saving)) {
+        const local = get().tags[accountId];
+        if (local) tags[accountId] = local; else delete tags[accountId];
+      }
+      set({ tags });
     } catch (error) {
-      // No tags is a usable state; the next account change retries.
+      // No tags is a usable state; the next load retries.
       console.warn('[MailboxTags] load failed:', error);
       if (get().loadedFor === key) set({ loadedFor: null });
     }
@@ -44,23 +54,24 @@ export const useMailboxTagStore = create<MailboxTagState>()((set, get) => ({
   setTag: async (accountId, tag) => {
     const client = useAuthStore.getState().client;
     if (!isMailboxTagClient(client)) throw new Error('Tags are not available on this server');
-    const previous = get().tags;
-    const next = { ...previous };
-    if (tag) next[accountId] = tag; else delete next[accountId];
-    set({ tags: next, saving: { ...get().saving, [accountId]: true } });
+    const previous = get().tags[accountId];
+    set({
+      tags: withTag(get().tags, accountId, tag),
+      saving: { ...get().saving, [accountId]: (get().saving[accountId] ?? 0) + 1 },
+    });
     try {
       await saveMailboxTag(client, accountId, tag);
     } catch (error) {
-      const rolledBack = { ...get().tags };
-      if (previous[accountId]) rolledBack[accountId] = previous[accountId]; else delete rolledBack[accountId];
-      set({ tags: rolledBack });
+      // Undo only if no later change has replaced this one on screen.
+      if ((get().tags[accountId] ?? null) === tag) set({ tags: withTag(get().tags, accountId, previous) });
       throw error;
     } finally {
       const saving = { ...get().saving };
-      delete saving[accountId];
+      if ((saving[accountId] ?? 1) <= 1) delete saving[accountId]; else saving[accountId] -= 1;
       set({ saving });
     }
   },
 
   reset: () => set({ tags: {}, saving: {}, loadedFor: null }),
 }));
+
