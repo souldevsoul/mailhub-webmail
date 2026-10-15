@@ -262,17 +262,6 @@ export function AccountSwitcher({
   const currentMailbox = showMailboxes
     ? mailboxOptions!.find((m) => m.id === selectedMailbox && m.kind !== "own")
     : undefined;
-  // Tags load with the page, not on first open, so the trigger dot and the
-  // coloured source chips in the merged list show straight away.
-  const loadTags = useMailboxTagStore((s) => s.load);
-  const tagClient = useAuthStore((s) => s.client);
-  const sharedTagAccounts = (mailboxOptions ?? []).filter((m) => m.kind === "shared" && m.accountId).map((m) => m.accountId!).join(",");
-  const resetTags = useMailboxTagStore((s) => s.reset);
-  // Another login (or none) must not see the previous session's tags.
-  useEffect(() => () => resetTags(), [tagClient, resetTags]);
-  useEffect(() => {
-    if (sharedTagAccounts && tagClient) void loadTags(sharedTagAccounts.split(","));
-  }, [sharedTagAccounts, tagClient, loadTags]);
   const currentTag = useMailboxTagStore((s) =>
     currentMailbox?.kind === "shared" && currentMailbox.accountId ? s.tags[currentMailbox.accountId] : undefined);
   const handleSelectMailbox = (id: string) => {

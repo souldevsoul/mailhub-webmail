@@ -1,5 +1,6 @@
 "use client";
 
+import { useMailboxTagsLoader } from "@/hooks/use-mailbox-tags-loader";
 import { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback, useId } from "react";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -171,6 +172,8 @@ function freshMailboxes(previous: Mailbox[], timeoutMs = 10_000): Promise<Mailbo
 export function MailApp({ linkSegments: routeSegments }: MailAppProps = {}) {
   // Static Lite build: the route params are empty, read the link from the URL.
   const linkSegments = useLiteLinkSegments('mail', routeSegments);
+  // MailHub: tag colours of the shared domain inboxes.
+  useMailboxTagsLoader();
   const t = useTranslations();
   const tCommon = useTranslations('common');
   const tQuote = useTranslations('quote_header');

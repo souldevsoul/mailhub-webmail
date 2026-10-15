@@ -14,6 +14,8 @@ import { threadKeyFor } from '@/lib/thread-utils';
 
 // Keep the real MailApp selection/download handlers and EmailViewer. Stub
 // unrelated shell UI and bootstrap requests so no server is contacted.
+// MailHub's mailbox tag load is its own request; these tests count the blob ones.
+vi.mock('@/hooks/use-mailbox-tags-loader', () => ({ useMailboxTagsLoader: () => {} }));
 vi.mock('next/dynamic', () => ({ default: (load: () => Promise<React.ComponentType<Record<string, unknown>>>) => {
   const Component = lazy(async () => ({ default: await load() }));
   return function Dynamic(props: Record<string, unknown>) {

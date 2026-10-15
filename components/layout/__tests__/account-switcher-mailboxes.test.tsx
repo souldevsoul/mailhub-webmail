@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Mailbox } from '@/lib/jmap/types';
 
@@ -82,21 +82,10 @@ describe('AccountSwitcher mailbox list', () => {
     expect(screen.queryByTestId('mailbox-switcher')).toBeNull();
   });
 
-  it('loads the inbox tags with the page and shows the tag of the inbox on screen', () => {
-    const load = vi.fn();
-    useAuthStore.setState({ client: {} } as never);
-    useMailboxTagStore.setState({ tags: { m: 'project' }, load });
+  it('shows the tag of the shared inbox on screen', () => {
+    useMailboxTagStore.setState({ tags: { m: 'project' } });
     const tagged = options.map((o) => (o.id === 'cobalt-inbox' ? { ...o, accountId: 'm' } : o));
     render(<AccountSwitcher variant="expanded" mailboxOptions={tagged} selectedMailbox="cobalt-inbox" onSelectMailbox={vi.fn()} />);
-    expect(load).toHaveBeenCalledWith(['m']);
     expect(screen.getByTestId('account-switcher-tag')).toHaveAttribute('data-tag', 'project');
-  });
-
-  it('forgets the tags when the session changes', () => {
-    useAuthStore.setState({ client: {} } as never);
-    useMailboxTagStore.setState({ tags: { m: 'project' }, load: vi.fn() });
-    render(<AccountSwitcher variant="expanded" mailboxOptions={options} selectedMailbox="own-inbox" onSelectMailbox={vi.fn()} />);
-    act(() => { useAuthStore.setState({ client: null } as never); });
-    expect(useMailboxTagStore.getState().tags).toEqual({});
   });
 });
