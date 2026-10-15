@@ -50,6 +50,16 @@ describe('mailbox tags', () => {
     expect(client.filesRequest).toHaveBeenCalledTimes(1);
   });
 
+  it('splits the lookup so no request exceeds the server call limit', async () => {
+    const files = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`a${i}`, '{"tag":"project"}']));
+    const { client } = fakeServer(files);
+    client.getMaxCallsInRequest = () => 16;
+    const tags = await loadMailboxTags(client, Object.keys(files));
+    expect(Object.keys(tags)).toHaveLength(9);
+    const sizes = (client.filesRequest as ReturnType<typeof vi.fn>).mock.calls.map(([calls]) => calls.length);
+    expect(sizes).toEqual([16, 2]);
+  });
+
   it('creates the file for a first tag', async () => {
     const { client, sets } = fakeServer({});
     await saveMailboxTag(client, 'm', 'business');

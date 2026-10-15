@@ -18,7 +18,12 @@ export interface MailboxTagClient {
   filesRequest(methodCalls: MethodCall[]): Promise<{ methodResponses?: [string, Record<string, unknown>, string][] }>;
   uploadBlob(file: File, accountId?: string): Promise<{ blobId: string }>;
   fetchBlob(blobId: string, name?: string, type?: string, accountId?: string): Promise<Blob>;
+  /** The server's maxCallsInRequest; a lookup costs two calls per account. */
+  getMaxCallsInRequest?(): number;
 }
+
+/** Stalwart's default maxCallsInRequest, for clients that cannot say. */
+const DEFAULT_MAX_CALLS = 16;
 
 export function isMailboxTagClient(client: unknown): client is MailboxTagClient {
   return !!client && typeof (client as MailboxTagClient).filesRequest === 'function';
@@ -45,6 +50,13 @@ interface TagNode { id: string; blobId: string }
  */
 async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, TagNode[]>> {
   if (accountIds.length === 0) return {};
+  // Two calls per account; split so no request exceeds the server's call limit.
+  const perRequest = Math.max(1, Math.floor((client.getMaxCallsInRequest?.() ?? DEFAULT_MAX_CALLS) / 2));
+  if (accountIds.length > perRequest) {
+    const parts: Promise<Record<string, TagNode[]>>[] = [];
+    for (let i = 0; i < accountIds.length; i += perRequest) parts.push(findTagNodes(client, accountIds.slice(i, i + perRequest)));
+    return Object.assign({}, ...(await Promise.all(parts)));
+  }
   const calls: MethodCall[] = accountIds.flatMap((accountId, i): MethodCall[] => [
     ['FileNode/query', { accountId, filter: { name: MAILBOX_TAG_FILE } }, `q${i}`],
     ['FileNode/get', {
