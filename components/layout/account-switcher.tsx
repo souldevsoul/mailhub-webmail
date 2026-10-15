@@ -18,10 +18,6 @@ import { Avatar } from "@/components/ui/avatar";
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
 import { toUnicodeDomain, toUnicodeEmail } from "@/lib/idn";
 
-import { MailboxSwitcherList, MAILBOX_TAG_STYLE, type SwitcherMailbox } from "./mailbox-switcher-list";
-import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
-export type { SwitcherMailbox };
-
 interface AccountSwitcherProps {
   /** "rail" = small avatar only (NavigationRail), "expanded" = avatar + name + email (Sidebar) */
   variant?: "rail" | "expanded" | "header";
@@ -35,11 +31,6 @@ interface AccountSwitcherProps {
   onSelectAllInboxes?: () => void;
   /** Whether that merged list is the one currently on screen. */
   allInboxesSelected?: boolean;
-  /** MailHub: inboxes listed in the popover (all inboxes, own inbox, shared domain inboxes). */
-  mailboxOptions?: SwitcherMailbox[];
-  /** Currently selected mailbox id, so the trigger can name the inbox on screen. */
-  selectedMailbox?: string;
-  onSelectMailbox?: (mailboxId: string) => void;
 }
 
 function AccountAvatar({ account, size = "sm" }: { account: AccountEntry; size?: "sm" | "md" | "xl" }) {
@@ -74,9 +65,6 @@ export function AccountSwitcher({
   className,
   onSelectAllInboxes,
   allInboxesSelected = false,
-  mailboxOptions,
-  selectedMailbox,
-  onSelectMailbox,
 }: AccountSwitcherProps) {
   const t = useTranslations("sidebar");
   const router = useRouter();
@@ -256,19 +244,6 @@ export function AccountSwitcher({
   const displayName = toUnicodeEmail(activeAccount?.displayName || activeAccount?.label || "");
   const displayEmail = toUnicodeEmail(activeAccount?.email || activeAccount?.username || "");
 
-  // The trigger names the inbox on screen when it is a shared or merged one, so
-  // switching domains from the top is visible without opening the sidebar.
-  const showMailboxes = !mvPopover && !!onSelectMailbox && (mailboxOptions?.length ?? 0) > 1;
-  const currentMailbox = showMailboxes
-    ? mailboxOptions!.find((m) => m.id === selectedMailbox && m.kind !== "own")
-    : undefined;
-  const currentTag = useMailboxTagStore((s) =>
-    currentMailbox?.kind === "shared" && currentMailbox.accountId ? s.tags[currentMailbox.accountId] : undefined);
-  const handleSelectMailbox = (id: string) => {
-    setOpen(false);
-    onSelectMailbox?.(id);
-  };
-
   // Mountain View leads its popover with the account you are already in - large avatar,
   // name, address - and lists only the others underneath, since choosing one is
   // the point of opening it. Every row carries the unread waiting there, so the
@@ -313,25 +288,9 @@ export function AccountSwitcher({
             <AccountAvatar account={activeAccount} size={variant === "expanded" ? "md" : "sm"} />
             {variant === "expanded" && (
               <>
-                <div className="min-w-0 flex-1" data-testid="account-switcher-label">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {currentMailbox ? currentMailbox.label : displayName}
-                  </p>
-                  <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                    {currentTag && (
-                      <span
-                        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", MAILBOX_TAG_STYLE[currentTag].dot)}
-                        title={t(`mailbox_tag_${currentTag}`)}
-                        data-testid="account-switcher-tag"
-                        data-tag={currentTag}
-                      />
-                    )}
-                    <span className="truncate">
-                      {currentMailbox && currentMailbox.kind === "shared"
-                        ? (currentMailbox.sublabel || t("switch_shared_inbox"))
-                        : displayEmail}
-                    </span>
-                  </p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
                 </div>
                 <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform", open && "rotate-180")} />
               </>
@@ -577,14 +536,6 @@ export function AccountSwitcher({
                 </div>
               )}
             </>
-          )}
-
-          {showMailboxes && (
-            <MailboxSwitcherList
-              options={mailboxOptions!}
-              selectedMailbox={selectedMailbox}
-              onSelect={handleSelectMailbox}
-            />
           )}
 
           {/* Separator + Add Account */}

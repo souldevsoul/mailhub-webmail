@@ -70,7 +70,8 @@ import { useSettingsStore, getKeywordVisibility } from "@/stores/settings-store"
 import { useEmailStore } from "@/stores/email-store";
 import { toast } from "@/stores/toast-store";
 import { debug } from "@/lib/debug";
-import { AccountSwitcher, type SwitcherMailbox } from "./account-switcher";
+import { AccountSwitcher } from "./account-switcher";
+import { SidebarDomainInboxes, type DomainInbox } from "./sidebar-domain-inboxes";
 import { useIsEmbedded } from "@/hooks/use-is-embedded";
 import { buildSettingsPath, SCHEDULED_MAILBOX_ID, scopedScheduledMailboxId } from "@/lib/deep-links";
 import { useTour } from "@/components/tour/tour-provider";
@@ -912,6 +913,12 @@ export function Sidebar({
       return stored !== null ? JSON.parse(stored) : true;
     } catch { return true; }
   });
+  const [domainInboxesExpanded, setDomainInboxesExpanded] = useState(() => {
+    try {
+      const stored = localStorage.getItem('sidebarDomainInboxesExpanded');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch { return true; }
+  });
   const [sharedExpanded, setSharedExpanded] = useState(() => {
     try {
       const stored = localStorage.getItem('sidebarSharedExpanded');
@@ -1056,9 +1063,9 @@ export function Sidebar({
   const ownTree = mailboxTree.filter(n => !n.id.startsWith('shared-account-') && !isServerScheduledNode(n));
   const sharedAccounts = mailboxTree.filter(n => n.id.startsWith('shared-account-'));
 
-  // MailHub: the top switcher lists every inbox this login can read - all of
-  // them merged, its own, and each shared domain inbox - so a domain is one
-  // click away instead of buried under "Shared" in the folder list.
+  // MailHub: each shared domain inbox gets a row of its own near the top of
+  // the sidebar, so a domain is one click away instead of buried under
+  // "Shared" in the folder list.
   const findInbox = (nodes: MailboxNode[]): MailboxNode | undefined => {
     for (const n of nodes) {
       if (n.role === 'inbox') return n;
@@ -1067,30 +1074,17 @@ export function Sidebar({
     }
     return undefined;
   };
-  const switcherMailboxes: SwitcherMailbox[] = [];
-  if (showUnified) {
-    switcherMailboxes.push({
-      id: UNIFIED_MAILBOX_IDS.inbox,
-      label: t("switch_all_inboxes"),
-      unread: unifiedCounts.find(c => c.role === 'inbox')?.unreadEmails,
-      kind: "all",
-    });
-  }
-  const ownInbox = ownTree.find(n => n.role === 'inbox');
-  if (ownInbox) {
-    switcherMailboxes.push({ id: ownInbox.id, label: t("switch_my_inbox"), unread: ownInbox.unreadEmails, kind: "own" });
-  }
+  const domainInboxes: DomainInbox[] = [];
   for (const account of sharedAccounts) {
     const inbox = findInbox(account.children);
-    if (!inbox) continue;
+    if (!inbox || !account.accountId) continue;
     const name = account.accountName || account.name;
     const at = name.lastIndexOf('@');
-    switcherMailboxes.push({
+    domainInboxes.push({
       id: inbox.id,
       label: at > 0 ? name.slice(at + 1) : name,
       sublabel: name,
       unread: inbox.unreadEmails,
-      kind: "shared",
       accountId: account.accountId,
     });
   }
@@ -1258,6 +1252,13 @@ export function Sidebar({
       return next;
     });
   };
+  const toggleDomainInboxes = () => {
+    setDomainInboxesExpanded((prev: boolean) => {
+      const next = !prev;
+      try { localStorage.setItem('sidebarDomainInboxesExpanded', JSON.stringify(next)); } catch { /* */ }
+      return next;
+    });
+  };
   const toggleShared = () => {
     setSharedExpanded((prev: boolean) => {
       const next = !prev;
@@ -1368,9 +1369,6 @@ export function Sidebar({
               <AccountSwitcher
                 variant="expanded"
                 className="flex-1"
-                mailboxOptions={switcherMailboxes}
-                selectedMailbox={selectedKeyword ? undefined : selectedMailbox}
-                onSelectMailbox={onMailboxSelect}
               />
             )}
           </div>
@@ -1471,6 +1469,27 @@ export function Sidebar({
           </div>
         )}
 
+        {!mvFlat && domainInboxes.length > 0 && (
+          <div>
+            <SidebarSectionHeader
+              label={t("mailbox_group_domains")}
+              expanded={domainInboxesExpanded}
+              onToggle={toggleDomainInboxes}
+              isCollapsed={isCollapsed}
+              first={!(showUnified || showCrossUnread || showCrossStarred || showCrossAll)}
+              testId="section-domain-inboxes"
+            />
+            {(domainInboxesExpanded || isCollapsed) && (
+              <SidebarDomainInboxes
+                inboxes={domainInboxes}
+                selectedMailbox={selectedKeyword ? undefined : selectedMailbox}
+                onSelect={(id) => onMailboxSelect?.(id)}
+                isCollapsed={isCollapsed}
+              />
+            )}
+          </div>
+        )}
+
         {useMultiAccount ? (
           accountGroups.map(({ account, isActive, tree }) => {
             const expanded = !collapsedAccountGroups.has(account.id);
@@ -1484,7 +1503,7 @@ export function Sidebar({
                   onSettings={isActive ? openFolderSettings : undefined}
                   settingsTitle={isActive ? t('settings') : undefined}
                   isCollapsed={isCollapsed}
-                  first={!showUnified && account.id === connectedAccounts[0]?.id}
+                  first={!showUnified && domainInboxes.length === 0 && account.id === connectedAccounts[0]?.id}
                   icon={<User className="w-3.5 h-3.5 text-muted-foreground" />}
                 />
                 {((expanded && !isCollapsed) || isCollapsed) && (
@@ -1532,7 +1551,7 @@ export function Sidebar({
                 onSettings={openFolderSettings}
                 settingsTitle={t('settings')}
                 isCollapsed={isCollapsed}
-                first={!showUnified}
+                first={!showUnified && domainInboxes.length === 0}
               />
             )}
             {(mvFlat || (foldersExpanded && !isCollapsed) || isCollapsed) && (

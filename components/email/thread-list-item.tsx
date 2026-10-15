@@ -6,7 +6,7 @@ import { formatScheduledSendAt } from "@/lib/scheduled-send-label";
 import { Email, ThreadGroup } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
 import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
-import { MAILBOX_TAG_STYLE } from "@/components/layout/mailbox-switcher-list";
+import { MAILBOX_TAG_STYLE } from "@/components/layout/sidebar-domain-inboxes";
 import { ListAttachmentChips, useListHasAttachment } from "./attachment-chips";
 import { VerificationCodeChip, useListVerificationCode } from "./verification-code-chip";
 import type { Attachment } from "@/lib/jmap/types";
