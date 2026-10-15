@@ -130,12 +130,14 @@ export function MailboxSwitcherList({ options, selectedMailbox, onSelect }: Mail
             data-mailbox-id={option.id}
             data-mailbox-kind={option.kind}
             onClick={() => onSelect(option.id)}
+            title={option.sublabel}
             className="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3 pe-2 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
             <Icon className={cn("h-4 w-4 flex-shrink-0", isSelected ? "text-primary" : "text-muted-foreground")} />
             <span className="min-w-0 flex-1">
               <span className={cn("block truncate text-sm", isSelected && "font-medium")}>{option.label}</span>
-              {option.sublabel && <span className="block truncate text-[11px] text-muted-foreground">{option.sublabel}</span>}
+              {/* The domain already names a shared inbox; its address stays for screen readers and the hover title, keeping rows to one line so many domains fit. */}
+              {option.sublabel && <span className="sr-only">{option.sublabel}</span>}
             </span>
             <UnreadBadge count={option.unread} />
           </button>
