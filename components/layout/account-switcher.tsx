@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
-import { Check, Plus, LogOut, Mails, Star, ChevronDown, AlertCircle, GripVertical, X, Settings, Cloud, Inbox, Users } from "@/components/icons";
+import { Check, Plus, LogOut, Mails, Star, ChevronDown, AlertCircle, GripVertical, X, Settings, Cloud } from "@/components/icons";
 import { useTranslations } from "next-intl";
 import type { Mailbox } from "@/lib/jmap/types";
 import { useAccountStore, type AccountEntry } from "@/stores/account-store";
@@ -18,14 +18,9 @@ import { Avatar } from "@/components/ui/avatar";
 import { useMenuNavigation } from "@/hooks/use-menu-navigation";
 import { toUnicodeDomain, toUnicodeEmail } from "@/lib/idn";
 
-/** A mailbox the switcher can jump to: the login's own inbox, a shared domain inbox, or all of them. */
-export interface SwitcherMailbox {
-  id: string;
-  label: string;
-  sublabel?: string;
-  unread?: number;
-  kind: "all" | "own" | "shared";
-}
+import { MailboxSwitcherList, MAILBOX_TAG_STYLE, type SwitcherMailbox } from "./mailbox-switcher-list";
+import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
+export type { SwitcherMailbox };
 
 interface AccountSwitcherProps {
   /** "rail" = small avatar only (NavigationRail), "expanded" = avatar + name + email (Sidebar) */
@@ -267,6 +262,8 @@ export function AccountSwitcher({
   const currentMailbox = showMailboxes
     ? mailboxOptions!.find((m) => m.id === selectedMailbox && m.kind !== "own")
     : undefined;
+  const currentTag = useMailboxTagStore((s) =>
+    currentMailbox?.kind === "shared" && currentMailbox.accountId ? s.tags[currentMailbox.accountId] : undefined);
   const handleSelectMailbox = (id: string) => {
     setOpen(false);
     onSelectMailbox?.(id);
@@ -320,10 +317,20 @@ export function AccountSwitcher({
                   <p className="text-sm font-medium text-foreground truncate">
                     {currentMailbox ? currentMailbox.label : displayName}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {currentMailbox && currentMailbox.kind === "shared"
-                      ? (currentMailbox.sublabel || t("switch_shared_inbox"))
-                      : displayEmail}
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    {currentTag && (
+                      <span
+                        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", MAILBOX_TAG_STYLE[currentTag].dot)}
+                        title={t(`mailbox_tag_${currentTag}`)}
+                        data-testid="account-switcher-tag"
+                        data-tag={currentTag}
+                      />
+                    )}
+                    <span className="truncate">
+                      {currentMailbox && currentMailbox.kind === "shared"
+                        ? (currentMailbox.sublabel || t("switch_shared_inbox"))
+                        : displayEmail}
+                    </span>
                   </p>
                 </div>
                 <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform", open && "rotate-180")} />
@@ -573,42 +580,12 @@ export function AccountSwitcher({
           )}
 
           {showMailboxes && (
-            <div className="border-t border-border py-1" data-testid="mailbox-switcher">
-              <p className="px-3 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {t("switch_mailbox_heading")}
-              </p>
-              <div className="max-h-72 overflow-y-auto">
-                {mailboxOptions!.map((mb) => {
-                  const isSelected = mb.id === selectedMailbox;
-                  const Icon = mb.kind === "all" ? Mails : mb.kind === "shared" ? Users : Inbox;
-                  return (
-                    <button
-                      key={mb.id}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={isSelected}
-                      data-testid="mailbox-option"
-                      data-mailbox-id={mb.id}
-                      data-mailbox-kind={mb.kind}
-                      onClick={() => handleSelectMailbox(mb.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2 text-start transition-colors",
-                        isSelected ? "bg-accent/50" : "hover:bg-muted"
-                      )}
-                    >
-                      <Icon className={cn("w-4 h-4 flex-shrink-0", isSelected ? "text-primary" : "text-muted-foreground")} />
-                      <span className="min-w-0 flex-1">
-                        <span className={cn("block text-sm truncate", isSelected && "font-medium")}>{mb.label}</span>
-                        {mb.sublabel && (
-                          <span className="block text-[11px] text-muted-foreground truncate">{mb.sublabel}</span>
-                        )}
-                      </span>
-                      <UnreadBadge count={mb.unread} />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <MailboxSwitcherList
+              options={mailboxOptions!}
+              selectedMailbox={selectedMailbox}
+              onSelect={handleSelectMailbox}
+              open={open}
+            />
           )}
 
           {/* Separator + Add Account */}

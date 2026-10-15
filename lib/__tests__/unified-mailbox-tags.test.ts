@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Email, Mailbox } from '@/lib/jmap/types';
 import type { IJMAPClient } from '@/lib/jmap/client-interface';
-import { fetchTagEmails, type UnifiedAccountClient } from '@/lib/unified-mailbox';
+import { fetchTagEmails, resolveSourceLabel, type UnifiedAccountClient } from '@/lib/unified-mailbox';
 
 // A tag keyword sits on messages in the user's own account and in the
 // group/shared accounts they can reach. The tag view fans out over all of
@@ -125,5 +125,23 @@ describe('fetchTagEmails', () => {
     const result = await fetchTagEmails([own, group], keyword, 50, 0);
     expect(result.emails.map((e) => e.id)).toEqual(['own-1']);
     expect(result.errors.get('group')).toBe('forbidden');
+  });
+});
+
+describe('resolveSourceLabel (MailHub domain inboxes)', () => {
+  const inbox = { ...mb('grp:inbox', 'inbox'), role: 'inbox' } as Mailbox;
+  const orders = { ...mb('grp:orders', 'orders'), name: 'Orders', role: null } as unknown as Mailbox;
+  const account = (label: string) => makeAccount({ accountId: 'grp', isShared: true, accountLabel: label, mailboxes: [inbox, orders] }, vi.fn());
+
+  it('names the domain for mail in a domain inbox', () => {
+    expect(resolveSourceLabel(email('a', '2026-09-10T00:00:00Z', 'grp:inbox'), account('inbox@cobalt.boutique'))).toBe('cobalt.boutique');
+  });
+
+  it('adds the folder for mail outside that inbox', () => {
+    expect(resolveSourceLabel(email('a', '2026-09-10T00:00:00Z', 'grp:orders'), account('inbox@cobalt.boutique'))).toBe('cobalt.boutique / Orders');
+  });
+
+  it('keeps the folder name for any other shared account', () => {
+    expect(resolveSourceLabel(email('a', '2026-09-10T00:00:00Z', 'grp:inbox'), account('Team'))).toBe(inbox.name);
   });
 });

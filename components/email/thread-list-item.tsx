@@ -5,6 +5,8 @@ import { cleanPreview, formatDate } from "@/lib/utils";
 import { formatScheduledSendAt } from "@/lib/scheduled-send-label";
 import { Email, ThreadGroup } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
+import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
+import { MAILBOX_TAG_STYLE } from "@/components/layout/mailbox-switcher-list";
 import { ListAttachmentChips, useListHasAttachment } from "./attachment-chips";
 import { VerificationCodeChip, useListVerificationCode } from "./verification-code-chip";
 import type { Attachment } from "@/lib/jmap/types";
@@ -194,13 +196,19 @@ function describeAccount(label: string | undefined, account: AccountEntry | unde
  * aggregate "All …" views (All Mail / unified / cross-account) where rows come
  * from different folders. `email.sourceFolder` is stamped at fetch time.
  */
-function SourceFolderTag({ name }: { name: string }) {
+function SourceFolderTag({ name, accountId }: { name: string; accountId?: string }) {
+  // MailHub: a message from a tagged domain inbox carries the tag's colour.
+  const tag = useMailboxTagStore((st) => (accountId ? st.tags[accountId] : undefined));
   return (
     <span
-      className="inline-flex max-w-[8rem] shrink-0 items-center gap-1 truncate rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+      className="inline-flex max-w-[10rem] shrink-0 items-center gap-1 truncate rounded-full border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground"
       title={name}
+      data-testid="source-folder-tag"
+      data-tag={tag ?? ""}
     >
-      <Folder className="h-3 w-3 shrink-0" />
+      {tag
+        ? <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", MAILBOX_TAG_STYLE[tag].dot)} aria-hidden="true" />
+        : <Folder className="h-3 w-3 shrink-0" />}
       <span className="truncate">{name}</span>
     </span>
   );
@@ -615,7 +623,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                     </>
                   )}
                   {showPaperclip && <StatusIcon icon={Paperclip} label={tStatus('has_attachment')} className="w-3.5 h-3.5 text-muted-foreground" />}
-                  {showSourceFolder && <SourceFolderTag name={email.sourceFolder!} />}
+                  {showSourceFolder && <SourceFolderTag name={email.sourceFolder!} accountId={email.sourceAccountId} />}
                   {scheduledSendLabel ? (
                     <span
                       className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium tabular-nums text-sky-700 dark:text-sky-300"
@@ -691,7 +699,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {showSourceFolder && <SourceFolderTag name={email.sourceFolder!} />}
+                    {showSourceFolder && <SourceFolderTag name={email.sourceFolder!} accountId={email.sourceAccountId} />}
                     {scheduledSendLabel ? (
                       <span
                         className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-sky-700 dark:text-sky-300"
@@ -1198,7 +1206,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                       </>
                     )}
                     {hasAttachment && <StatusIcon icon={Paperclip} label={tStatus('has_attachment')} className="w-3.5 h-3.5 text-muted-foreground" />}
-                    {showSourceFolder && <SourceFolderTag name={latestEmail.sourceFolder!} />}
+                    {showSourceFolder && <SourceFolderTag name={latestEmail.sourceFolder!} accountId={latestEmail.sourceAccountId} />}
                     {scheduledSendLabel ? (
                       <span
                         className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium tabular-nums text-sky-700 dark:text-sky-300"
@@ -1281,7 +1289,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {showSourceFolder && <SourceFolderTag name={latestEmail.sourceFolder!} />}
+                      {showSourceFolder && <SourceFolderTag name={latestEmail.sourceFolder!} accountId={latestEmail.sourceAccountId} />}
                       {scheduledSendLabel ? (
                         <span
                           className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-sky-700 dark:text-sky-300"

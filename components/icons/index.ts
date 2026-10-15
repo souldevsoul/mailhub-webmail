@@ -198,6 +198,7 @@ export {
   IconScale as Scale,
   IconScissors as Scissors,
   IconFileText as ScrollText,
+  IconRocket as Rocket,
   IconSearch as Search,
   IconSearchOff as SearchX,
   IconSend as Send,

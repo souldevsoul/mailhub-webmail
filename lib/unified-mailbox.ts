@@ -74,6 +74,22 @@ export function resolveSourceFolderName(email: Email, mailboxes: Mailbox[]): str
 }
 
 /**
+ * MailHub: the source chip of a message in the merged views. A message from a
+ * shared domain inbox (inbox@cobalt.boutique) names the domain, plus the folder
+ * when it sits outside that inbox, since "Inbox" alone does not say which of
+ * several inboxes it came to.
+ */
+export function resolveSourceLabel(email: Email, account: UnifiedAccountClient): string | undefined {
+  const folder = resolveSourceFolderName(email, account.mailboxes);
+  // Only MailHub's domain inboxes (inbox@<domain>); other shared accounts keep the folder name.
+  if (!account.isShared || !/^inbox@/i.test(account.accountLabel)) return folder;
+  const domain = account.accountLabel.slice('inbox@'.length);
+  const inbox = account.mailboxes.find((m) => m.role === 'inbox');
+  const inInbox = !!inbox && !!(email.mailboxIds?.[inbox.id] || (inbox.originalId && email.mailboxIds?.[inbox.originalId]));
+  return !folder || inInbox ? domain : `${domain} / ${folder}`;
+}
+
+/**
  * Finds the first mailbox matching the given role.
  */
 export function findMailboxByRole(
@@ -191,7 +207,7 @@ export async function fetchUnifiedEmails(
       accountLabel: account.accountLabel,
       sourceClientAccountId: account.clientAccountId,
       sourceAccountId: account.jmapAccountId,
-      sourceFolder: resolveSourceFolderName(email, account.mailboxes),
+      sourceFolder: resolveSourceLabel(email, account),
     }));
 
     mergedEmails = mergedEmails.concat(decorated);
@@ -317,7 +333,7 @@ async function fanOutUnifiedQuery(
       accountLabel: account.accountLabel,
       sourceClientAccountId: account.clientAccountId,
       sourceAccountId: account.jmapAccountId,
-      sourceFolder: resolveSourceFolderName(email, account.mailboxes),
+      sourceFolder: resolveSourceLabel(email, account),
     }));
     mergedEmails = mergedEmails.concat(decorated);
     totalSum += result.total;
@@ -463,7 +479,7 @@ async function fanOutCrossQuery(
       accountLabel: account.accountLabel,
       sourceClientAccountId: account.clientAccountId,
       sourceAccountId: account.jmapAccountId,
-      sourceFolder: resolveSourceFolderName(email, account.mailboxes),
+      sourceFolder: resolveSourceLabel(email, account),
     }));
     mergedEmails = mergedEmails.concat(decorated);
     totalSum += result.total;
@@ -708,7 +724,7 @@ async function fanOutAccountQuery(
       accountLabel: account.accountLabel,
       sourceClientAccountId: account.clientAccountId,
       sourceAccountId: account.jmapAccountId,
-      sourceFolder: resolveSourceFolderName(email, account.mailboxes),
+      sourceFolder: resolveSourceLabel(email, account),
     }));
     mergedEmails = mergedEmails.concat(decorated);
     totalSum += result.total;

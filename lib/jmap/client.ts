@@ -7,6 +7,7 @@ import { batched, itemsPerRequest } from "./request-limits";
 import { keywordPointer } from "./patch-pointer";
 import { FirstTouchGate } from "./first-touch-gate";
 import { debug } from "@/lib/debug";
+import { isMailboxTagFile } from "@/lib/mailbox-tags";
 import { normalizeCalendarEventLike } from "@/lib/calendar-event-normalization";
 import { SYNTHETIC_ID_PROBE, RECURRENCE_BASE_PROPERTIES, hydrateRecurrenceInstances, isServerRecurrenceInstance } from "@/lib/recurrence-instances";
 import { findTasksOnlyCalendarIds, isTaskLikeObject, type ScannedCalendarObject } from "@/lib/calendar-component-detection";
@@ -1169,6 +1170,11 @@ export class JMAPClient implements IJMAPClient {
    */
   async stalwartRequest(methodCalls: JMAPMethodCall[]): Promise<JMAPResponse> {
     return this.request(methodCalls, ['urn:ietf:params:jmap:core', 'urn:stalwart:jmap']);
+  }
+
+  /** FileNode method calls in any account this session reaches (MailHub mailbox tags). */
+  async filesRequest(methodCalls: JMAPMethodCall[]): Promise<JMAPResponse> {
+    return this.request(methodCalls, this.fileUsing());
   }
 
   getAuthHeader(): string {
@@ -8015,7 +8021,7 @@ export class JMAPClient implements IJMAPClient {
    */
   async listAllFileNodes(): Promise<FileNode[]> {
     const nodes = await this.fetchAllFileNodes(this.getFilesAccountId());
-    return nodes.map(fromWireFileNode);
+    return nodes.filter(n => !isMailboxTagFile(n)).map(fromWireFileNode);
   }
 
   /**
@@ -8122,7 +8128,7 @@ export class JMAPClient implements IJMAPClient {
       const isPrimary = accountId === primaryId;
       const account = this.accounts[accountId];
       try {
-        const nodes = await this.fetchAllFileNodes(accountId);
+        const nodes = (await this.fetchAllFileNodes(accountId)).filter(n => !isMailboxTagFile(n));
         for (const node of nodes) {
           all.push({
             ...fromWireFileNode(node),

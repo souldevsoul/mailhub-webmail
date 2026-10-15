@@ -1091,6 +1091,7 @@ export function Sidebar({
       sublabel: name,
       unread: inbox.unreadEmails,
       kind: "shared",
+      accountId: account.accountId,
     });
   }
 
