@@ -1,15 +1,23 @@
 /**
- * MailHub: a shared domain inbox can be tagged "business" or "project".
+ * MailHub: a shared domain inbox can be tagged "business" or "project", and
+ * filed under a company (e.g. "Synapse") that groups it in the sidebar.
  *
- * The tag lives in the shared account itself, as a small JSON file at the root
- * of its file storage (JMAP FileNode), so every member of the inbox sees the
- * same tag on every device and any member can change it. The file is hidden
- * from the Files view.
+ * Both live in the shared account itself, as a small JSON file at the root of
+ * its file storage (JMAP FileNode), so every member of the inbox sees the same
+ * on every device and any member can change them. The file is hidden from the
+ * Files view.
  */
 
 export type MailboxTag = 'business' | 'project';
 export const MAILBOX_TAGS: readonly MailboxTag[] = ['business', 'project'];
 export const MAILBOX_TAG_FILE = '.mailhub-mailbox.json';
+export const MAX_COMPANY_LENGTH = 40;
+
+/** What is stored for one shared inbox. Both parts are optional. */
+export interface MailboxMeta {
+  tag?: MailboxTag;
+  company?: string;
+}
 
 type MethodCall = [string, Record<string, unknown>, string];
 
@@ -29,13 +37,26 @@ export function isMailboxTagClient(client: unknown): client is MailboxTagClient 
   return !!client && typeof (client as MailboxTagClient).filesRequest === 'function';
 }
 
-export function parseMailboxTag(text: string): MailboxTag | null {
+/** A company name as stored: trimmed, inner whitespace collapsed, capped; empty means none. */
+export function normalizeCompany(name: unknown): string | undefined {
+  if (typeof name !== 'string') return undefined;
+  const clean = name.replace(/\s+/g, ' ').trim().slice(0, MAX_COMPANY_LENGTH).trim();
+  return clean || undefined;
+}
+
+/** The known parts of a stored file; unknown or malformed parts are dropped. */
+export function parseMailboxMeta(text: string): MailboxMeta | null {
+  let raw: { tag?: unknown; company?: unknown };
   try {
-    const tag = (JSON.parse(text) as { tag?: unknown })?.tag;
-    return MAILBOX_TAGS.includes(tag as MailboxTag) ? (tag as MailboxTag) : null;
+    raw = JSON.parse(text) ?? {};
   } catch {
     return null;
   }
+  const meta: MailboxMeta = {};
+  if (MAILBOX_TAGS.includes(raw.tag as MailboxTag)) meta.tag = raw.tag as MailboxTag;
+  const company = normalizeCompany(raw.company);
+  if (company) meta.company = company;
+  return meta.tag || meta.company ? meta : null;
 }
 
 export function isMailboxTagFile(node: { name?: string | null; parentId?: string | null }): boolean {
@@ -77,22 +98,22 @@ async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Pro
   return found;
 }
 
-/** Tags of the given shared accounts; accounts without a tag are left out. */
-export async function loadMailboxTags(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, MailboxTag>> {
+/** Tag and company of the given shared accounts; accounts with neither are left out. */
+export async function loadMailboxMeta(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, MailboxMeta>> {
   const nodes = await findTagNodes(client, accountIds);
   const entries = await Promise.all(
     Object.entries(nodes).map(async ([accountId, [node]]) => {
       try {
         const blob = await client.fetchBlob(node.blobId, MAILBOX_TAG_FILE, 'application/json', accountId);
-        return [accountId, parseMailboxTag(await blob.text())] as const;
+        return [accountId, parseMailboxMeta(await blob.text())] as const;
       } catch {
         return [accountId, null] as const;
       }
     }),
   );
-  const tags: Record<string, MailboxTag> = {};
-  for (const [accountId, tag] of entries) if (tag) tags[accountId] = tag;
-  return tags;
+  const found: Record<string, MailboxMeta> = {};
+  for (const [accountId, meta] of entries) if (meta) found[accountId] = meta;
+  return found;
 }
 
 function setResult(response: Awaited<ReturnType<MailboxTagClient['filesRequest']>>): void {
@@ -103,15 +124,17 @@ function setResult(response: Awaited<ReturnType<MailboxTagClient['filesRequest']
   if (failure) throw new Error(failure.description || 'FileNode/set failed');
 }
 
-/** Sets (or with null, removes) the tag of one shared account. */
-export async function saveMailboxTag(client: MailboxTagClient, accountId: string, tag: MailboxTag | null): Promise<void> {
+/** Stores the tag and company of one shared account; with neither, removes the file. */
+export async function saveMailboxMeta(client: MailboxTagClient, accountId: string, meta: MailboxMeta): Promise<void> {
   const [keep, ...extra] = (await findTagNodes(client, [accountId]))[accountId] ?? [];
-  if (!tag) {
+  const company = normalizeCompany(meta.company);
+  const body: MailboxMeta = { ...(meta.tag ? { tag: meta.tag } : {}), ...(company ? { company } : {}) };
+  if (!body.tag && !body.company) {
     if (!keep) return;
     setResult(await client.filesRequest([['FileNode/set', { accountId, destroy: [keep.id, ...extra.map((n) => n.id)] }, 's0']]));
     return;
   }
-  const file = new File([JSON.stringify({ tag })], MAILBOX_TAG_FILE, { type: 'application/json' });
+  const file = new File([JSON.stringify(body)], MAILBOX_TAG_FILE, { type: 'application/json' });
   const { blobId } = await client.uploadBlob(file, accountId);
   const set: Record<string, unknown> = keep
     ? { accountId, update: { [keep.id]: { blobId } } }

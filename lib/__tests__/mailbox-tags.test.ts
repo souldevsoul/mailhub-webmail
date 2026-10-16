@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { loadMailboxTags, saveMailboxTag, parseMailboxTag, isMailboxTagFile, MAILBOX_TAG_FILE, type MailboxTagClient } from '../mailbox-tags';
+import { loadMailboxMeta, saveMailboxMeta, parseMailboxMeta, normalizeCompany, isMailboxTagFile, MAILBOX_TAG_FILE, type MailboxTagClient } from '../mailbox-tags';
 
 // MailHub: Business/Project tags of shared domain inboxes live in a small JSON
 // file at the root of each shared account's file storage.
@@ -30,11 +30,18 @@ function fakeServer(files: Record<string, string>) {
 }
 
 describe('mailbox tags', () => {
-  it('parses only known tags', () => {
-    expect(parseMailboxTag('{"tag":"business"}')).toBe('business');
-    expect(parseMailboxTag('{"tag":"project"}')).toBe('project');
-    expect(parseMailboxTag('{"tag":"other"}')).toBeNull();
-    expect(parseMailboxTag('not json')).toBeNull();
+  it('parses only known tags and a usable company', () => {
+    expect(parseMailboxMeta('{"tag":"business"}')).toEqual({ tag: 'business' });
+    expect(parseMailboxMeta('{"tag":"project","company":" Synapse "}')).toEqual({ tag: 'project', company: 'Synapse' });
+    expect(parseMailboxMeta('{"company":"Synapse"}')).toEqual({ company: 'Synapse' });
+    expect(parseMailboxMeta('{"tag":"other","company":42}')).toBeNull();
+    expect(parseMailboxMeta('not json')).toBeNull();
+  });
+
+  it('tidies company names', () => {
+    expect(normalizeCompany('  Acme   Group ')).toBe('Acme Group');
+    expect(normalizeCompany('   ')).toBeUndefined();
+    expect(normalizeCompany('x'.repeat(60))).toHaveLength(40);
   });
 
   it('treats only the root-level file as the tag file', () => {
@@ -43,10 +50,10 @@ describe('mailbox tags', () => {
     expect(isMailboxTagFile({ name: 'report.pdf', parentId: null })).toBe(false);
   });
 
-  it('reads the tags of several accounts in one request and leaves untagged ones out', async () => {
-    const { client } = fakeServer({ m: '{"tag":"project"}', n: '{"tag":"business"}', o: '{"tag":"bogus"}' });
-    const tags = await loadMailboxTags(client, ['m', 'n', 'o', 'p']);
-    expect(tags).toEqual({ m: 'project', n: 'business' });
+  it('reads several accounts in one request and leaves empty ones out', async () => {
+    const { client } = fakeServer({ m: '{"tag":"project","company":"Synapse"}', n: '{"tag":"business"}', o: '{"tag":"bogus"}' });
+    const meta = await loadMailboxMeta(client, ['m', 'n', 'o', 'p']);
+    expect(meta).toEqual({ m: { tag: 'project', company: 'Synapse' }, n: { tag: 'business' } });
     expect(client.filesRequest).toHaveBeenCalledTimes(1);
   });
 
@@ -54,15 +61,15 @@ describe('mailbox tags', () => {
     const files = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`a${i}`, '{"tag":"project"}']));
     const { client } = fakeServer(files);
     client.getMaxCallsInRequest = () => 16;
-    const tags = await loadMailboxTags(client, Object.keys(files));
-    expect(Object.keys(tags)).toHaveLength(9);
+    const meta = await loadMailboxMeta(client, Object.keys(files));
+    expect(Object.keys(meta)).toHaveLength(9);
     const sizes = (client.filesRequest as ReturnType<typeof vi.fn>).mock.calls.map(([calls]) => calls.length);
     expect(sizes).toEqual([16, 2]);
   });
 
   it('creates the file for a first tag', async () => {
     const { client, sets } = fakeServer({});
-    await saveMailboxTag(client, 'm', 'business');
+    await saveMailboxMeta(client, 'm', { tag: 'business' });
     expect(sets).toHaveLength(1);
     const create = (sets[0][1].create as Record<string, Record<string, unknown>>).tag;
     expect(create).toMatchObject({ name: MAILBOX_TAG_FILE, parentId: null, blobId: 'up-{"tag":"business"}' });
@@ -70,17 +77,23 @@ describe('mailbox tags', () => {
 
   it('replaces the content of an existing tag file', async () => {
     const { client, sets } = fakeServer({ m: '{"tag":"business"}' });
-    await saveMailboxTag(client, 'm', 'project');
+    await saveMailboxMeta(client, 'm', { tag: 'project' });
     expect(sets[0][1].update).toEqual({ n0: { blobId: 'up-{"tag":"project"}' } });
+  });
+
+  it('stores tag and company together', async () => {
+    const { client, sets } = fakeServer({ m: '{"tag":"business"}' });
+    await saveMailboxMeta(client, 'm', { tag: 'business', company: ' Synapse ' });
+    expect(sets[0][1].update).toEqual({ n0: { blobId: 'up-{"tag":"business","company":"Synapse"}' } });
   });
 
   it('removes the file when the tag is cleared, and does nothing when there is none', async () => {
     const tagged = fakeServer({ m: '{"tag":"business"}' });
-    await saveMailboxTag(tagged.client, 'm', null);
+    await saveMailboxMeta(tagged.client, 'm', {});
     expect(tagged.sets[0][1].destroy).toEqual(['n0']);
 
     const untagged = fakeServer({});
-    await saveMailboxTag(untagged.client, 'm', null);
+    await saveMailboxMeta(untagged.client, 'm', { company: '  ' });
     expect(untagged.sets).toHaveLength(0);
   });
 
@@ -92,7 +105,7 @@ describe('mailbox tags', () => {
         { id: 'n9', name: MAILBOX_TAG_FILE, parentId: null, blobId: 'b-m2' },
       ] }, 'g0']],
     }));
-    await saveMailboxTag(client, 'm', 'project');
+    await saveMailboxMeta(client, 'm', { tag: 'project' });
     expect(sets[0][1]).toMatchObject({ update: { n0: { blobId: 'up-{"tag":"project"}' } }, destroy: ['n9'] });
   });
 
@@ -100,6 +113,6 @@ describe('mailbox tags', () => {
     const { client } = fakeServer({});
     (client.filesRequest as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({ methodResponses: [['FileNode/get', { list: [] }, 'g0']] }))
       .mockImplementationOnce(async () => ({ methodResponses: [['FileNode/set', { notCreated: { tag: { description: 'forbidden' } } }, 's0']] }));
-    await expect(saveMailboxTag(client, 'm', 'project')).rejects.toThrow('forbidden');
+    await expect(saveMailboxMeta(client, 'm', { tag: 'project' })).rejects.toThrow('forbidden');
   });
 });

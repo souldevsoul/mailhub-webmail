@@ -120,7 +120,6 @@ function TotpSetupScreen({ t, username, issuer, isSaving, enableTotp, onSignOut 
           <p className="text-sm text-foreground">{t("gate_step_scan")}</p>
           <div className="flex justify-center">
             {qr ? (
-              // eslint-disable-next-line @next/next/no-img-element -- data URL, generated in the browser
               <img src={qr} width={200} height={200} alt="" className="rounded-md border border-border bg-white p-2" data-testid="totp-gate-qr" />
             ) : (
               <div className="grid h-[200px] w-[200px] place-items-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
