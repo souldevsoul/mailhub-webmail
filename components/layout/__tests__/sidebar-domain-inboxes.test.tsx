@@ -2,8 +2,8 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // MailHub: the shared domain inboxes are listed in the sidebar. Each can be
-// tagged Business or Project and filed under a company; companies become
-// collapsible folders.
+// tagged Business or Project and filed under a company. Types become sections
+// (Business, Projects, then untagged) and companies collapsible folders in each.
 
 vi.mock('@/lib/mailbox-tags', async (orig) => ({
   ...(await orig<typeof import('@/lib/mailbox-tags')>()),
@@ -38,6 +38,13 @@ const folders = () => Object.fromEntries(screen.getAllByTestId('company-folder')
   f.getAttribute('aria-label'),
   within(f).queryAllByTestId('mailbox-option').map((o) => o.getAttribute('data-mailbox-id')),
 ]));
+// Section label -> company folder -> inbox ids, or section label -> inbox ids while it has no companies.
+const layout = () => Object.fromEntries(screen.getAllByTestId('type-section').map((section) => {
+  const inFolders = within(section).queryAllByTestId('company-folder');
+  return [section.getAttribute('aria-label'), inFolders.length
+    ? Object.fromEntries(inFolders.map((f) => [f.getAttribute('aria-label'), within(f).queryAllByTestId('mailbox-option').map((o) => o.dataset.mailboxId)]))
+    : within(section).queryAllByTestId('mailbox-option').map((o) => o.dataset.mailboxId)];
+}));
 
 describe('SidebarDomainInboxes', () => {
   beforeEach(() => {
@@ -95,7 +102,10 @@ describe('SidebarDomainInboxes', () => {
     const chooser = screen.getByTestId('mailbox-tag-chooser');
     fireEvent.click(within(chooser).getAllByTestId('mailbox-company').find((c) => c.dataset.company === 'Synapse')!);
     expect(saveMock).toHaveBeenCalledWith(expect.anything(), 'q', { tag: 'project', company: 'Synapse' });
-    expect(folders().Synapse).toEqual(['cobalt-inbox', 'sayit-inbox']);
+    expect(layout()).toEqual({
+      mailbox_section_project: { Synapse: ['sayit-inbox'] },
+      mailbox_section_untagged: { Synapse: ['cobalt-inbox'], mailbox_group_other: ['ratify-inbox'] },
+    });
   });
 
   it('creates a new company from the editor', async () => {
@@ -134,6 +144,37 @@ describe('SidebarDomainInboxes', () => {
     expect(useMailboxTagStore.getState().companies).toEqual({ m: 'Synapse' });
     expect(useMailboxTagStore.getState().tags).toEqual({ m: 'project' });
     expect(folders().Synapse).toEqual(['cobalt-inbox']);
+  });
+
+  it('splits typed inboxes into Business and Projects sections, each with its own company folders', () => {
+    renderList({ tags: { m: 'business', p: 'project', q: 'business' }, companies: { m: 'Synapse', p: 'Synapse' } });
+    expect(layout()).toEqual({
+      mailbox_section_business: { Synapse: ['cobalt-inbox'], mailbox_group_other: ['sayit-inbox'] },
+      mailbox_section_project: { Synapse: ['ratify-inbox'] },
+    });
+    expect(screen.getAllByTestId('type-section').map((s) => s.dataset.section)).toEqual(['business', 'project']);
+  });
+
+  it('lists a section flat while none of its inboxes has a company, and puts untyped inboxes last', () => {
+    renderList({ tags: { q: 'project' } });
+    expect(layout()).toEqual({ mailbox_section_project: ['sayit-inbox'], mailbox_section_untagged: ['cobalt-inbox', 'ratify-inbox'] });
+  });
+
+  it('folds a section away with its unread total, separately from a same-named company in another section', () => {
+    const { unmount } = renderList({ tags: { m: 'business', q: 'project' }, companies: { m: 'Synapse', q: 'Synapse' } });
+    const business = screen.getAllByTestId('type-section').find((s) => s.dataset.section === 'business')!;
+    fireEvent.click(within(business).getByTestId('type-section-toggle'));
+    expect(within(business).queryAllByTestId('mailbox-option')).toHaveLength(0);
+    expect(within(business).getByTestId('type-section-toggle')).toHaveTextContent('3');
+    const projects = screen.getAllByTestId('type-section').find((s) => s.dataset.section === 'project')!;
+    fireEvent.click(within(projects).getByTestId('company-folder-toggle'));
+    unmount();
+    renderList({ tags: { m: 'business', q: 'project' }, companies: { m: 'Synapse', q: 'Synapse' } });
+    expect(layout()).toEqual({
+      mailbox_section_business: [],
+      mailbox_section_project: { Synapse: [] },
+      mailbox_section_untagged: ['ratify-inbox'],
+    });
   });
 
   it('closes the editor with Escape and gives focus back to its button', () => {
