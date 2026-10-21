@@ -1074,20 +1074,31 @@ export function Sidebar({
     }
     return undefined;
   };
+  const mvFlat = mvShell && !isCollapsed;
+  const folderIdsOf = (nodes: MailboxNode[]): string[] => nodes.flatMap((n) => [n.id, ...folderIdsOf(n.children)]);
   const domainInboxes: DomainInbox[] = [];
+  const domainAccounts = new Map<string, MailboxNode>();
   for (const account of sharedAccounts) {
     const inbox = findInbox(account.children);
     if (!inbox || !account.accountId) continue;
     const name = account.accountName || account.name;
     const at = name.lastIndexOf('@');
+    const junk = account.children.find((n) => n.role === 'junk' || n.role === 'spam');
+    domainAccounts.set(inbox.id, account);
     domainInboxes.push({
       id: inbox.id,
       label: at > 0 ? name.slice(at + 1) : name,
       sublabel: name,
       unread: inbox.unreadEmails,
       accountId: account.accountId,
+      junk: junk && { id: junk.id, total: junk.totalEmails ?? 0, unread: junk.unreadEmails ?? 0 },
+      folderIds: folderIdsOf(account.children).filter((id) => id !== inbox.id),
     });
   }
+  // The domain list shows every folder of these accounts, so "Shared" keeps only the rest.
+  const otherSharedAccounts = mvFlat || isCollapsed
+    ? sharedAccounts
+    : sharedAccounts.filter((account) => ![...domainAccounts.values()].includes(account));
 
   // Mountain View's navigation is one flat list of the few places mail
   // actually goes, with everything else - the folders you made, the shared
@@ -1096,7 +1107,6 @@ export function Sidebar({
   // goes and the rest move below the expander. The collapsed rail is left as
   // it is: it shows icons only, and hiding half of them behind a word would
   // leave a control with no room to put it.
-  const mvFlat = mvShell && !isCollapsed;
   const isPrimaryFolder = (node: MailboxNode) =>
     node.role === 'inbox' || node.role === 'sent' || node.role === 'drafts';
   const primaryTree = mvFlat ? ownTree.filter(isPrimaryFolder) : ownTree;
@@ -1317,6 +1327,39 @@ export function Sidebar({
     openMailboxContextMenu(e, { kind: "folders-section", accountId });
   };
 
+  // The folders of one shared account, under "Shared" or under its row in the
+  // domain list. `depth` re-indents them to sit under that row.
+  const withDepth = (node: MailboxNode, depth: number): MailboxNode =>
+    ({ ...node, depth, children: node.children.map((child) => withDepth(child, depth + 1)) });
+  const renderSharedFolders = (account: MailboxNode, nodes: MailboxNode[], depth?: number) => {
+    const menuAccountId = sharedAccountMenuId(account.accountId);
+    const list = depth === undefined ? nodes : nodes.map((node) => withDepth(node, depth));
+    const scheduled = { accountId: menuAccountId, depth };
+    return (
+      <>
+        {list.map((child) => (
+          <Fragment key={child.id}>
+            <MailboxTreeItem
+              node={child}
+              selectedMailbox={selectedKeyword ? "" : selectedMailbox}
+              expandedFolders={expandedFolders}
+              onMailboxSelect={onMailboxSelect}
+              onToggleExpand={handleToggleExpand}
+              isCollapsed={isCollapsed}
+              onUnreadFilterClick={onUnreadFilterClick}
+              colorful={colorfulSidebarIcons}
+              onContextMenu={handleMailboxContextMenu}
+            />
+            {child.role === 'drafts' && menuAccountId
+              && renderScheduledRow(`${account.id}-scheduled`, scheduled)}
+          </Fragment>
+        ))}
+        {menuAccountId && !list.some((child) => child.role === 'drafts')
+          && renderScheduledRow(`${account.id}-scheduled`, scheduled)}
+      </>
+    );
+  };
+
   return (
     <div
       onMouseEnter={mvShell && sidebarCollapsed ? () => setRailHovered(true) : undefined}
@@ -1485,6 +1528,13 @@ export function Sidebar({
                 selectedMailbox={selectedKeyword ? undefined : selectedMailbox}
                 onSelect={(id) => onMailboxSelect?.(id)}
                 isCollapsed={isCollapsed}
+                renderFolders={(inbox, depth) => {
+                  const account = domainAccounts.get(inbox.id);
+                  if (!account) return null;
+                  const inboxNode = findInbox(account.children);
+                  const nodes = account.children.flatMap((n) => n === inboxNode ? n.children : [n]);
+                  return renderSharedFolders(account, nodes, depth);
+                }}
               />
             )}
           </div>
@@ -1659,7 +1709,7 @@ export function Sidebar({
           </div>
         )}
 
-        {!useMultiAccount && showSecondary && sharedAccounts.length > 0 && (
+        {!useMultiAccount && showSecondary && otherSharedAccounts.length > 0 && (
           <div>
             <SidebarSectionHeader
               label={t("shared")}
@@ -1670,7 +1720,7 @@ export function Sidebar({
             />
             {((sharedExpanded && !isCollapsed) || isCollapsed) && (
               <>
-                {sharedAccounts.map((account) => {
+                {otherSharedAccounts.map((account) => {
                   const accountExpanded = expandedSharedAccounts.has(account.id);
                   const menuAccountId = sharedAccountMenuId(account.accountId);
                   return (
@@ -1687,29 +1737,7 @@ export function Sidebar({
                           ? (e) => handleSharedAccountContextMenu(e, menuAccountId)
                           : undefined}
                       />
-                      {accountExpanded && !isCollapsed && (
-                        <>
-                          {account.children.map((child) => (
-                            <Fragment key={child.id}>
-                              <MailboxTreeItem
-                                node={child}
-                                selectedMailbox={selectedKeyword ? "" : selectedMailbox}
-                                expandedFolders={expandedFolders}
-                                onMailboxSelect={onMailboxSelect}
-                                onToggleExpand={handleToggleExpand}
-                                isCollapsed={isCollapsed}
-                                onUnreadFilterClick={onUnreadFilterClick}
-                                colorful={colorfulSidebarIcons}
-                                onContextMenu={handleMailboxContextMenu}
-                              />
-                              {child.role === 'drafts' && menuAccountId
-                                && renderScheduledRow(`${account.id}-scheduled`, { accountId: menuAccountId })}
-                            </Fragment>
-                          ))}
-                          {menuAccountId && !account.children.some((child) => child.role === 'drafts')
-                            && renderScheduledRow(`${account.id}-scheduled`, { accountId: menuAccountId })}
-                        </>
-                      )}
+                      {accountExpanded && !isCollapsed && renderSharedFolders(account, account.children)}
                     </div>
                   );
                 })}

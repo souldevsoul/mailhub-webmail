@@ -38,12 +38,20 @@ const folders = () => Object.fromEntries(screen.getAllByTestId('company-folder')
   f.getAttribute('aria-label'),
   within(f).queryAllByTestId('mailbox-option').map((o) => o.getAttribute('data-mailbox-id')),
 ]));
-// Section label -> company folder -> inbox ids, or section label -> inbox ids while it has no companies.
+// Inbox ids listed directly, outside any company folder.
+const loose = (root: HTMLElement = document.body) => within(root).queryAllByTestId('mailbox-option')
+  .filter((o) => !o.closest('[data-testid="company-folder"]')).map((o) => o.dataset.mailboxId);
+// Section label -> company folder -> inbox ids (with "_" for the inboxes beside the folders),
+// or section label -> inbox ids while it has no companies.
 const layout = () => Object.fromEntries(screen.getAllByTestId('type-section').map((section) => {
   const inFolders = within(section).queryAllByTestId('company-folder');
+  const rest = loose(section);
   return [section.getAttribute('aria-label'), inFolders.length
-    ? Object.fromEntries(inFolders.map((f) => [f.getAttribute('aria-label'), within(f).queryAllByTestId('mailbox-option').map((o) => o.dataset.mailboxId)]))
-    : within(section).queryAllByTestId('mailbox-option').map((o) => o.dataset.mailboxId)];
+    ? {
+      ...Object.fromEntries(inFolders.map((f) => [f.getAttribute('aria-label'), within(f).queryAllByTestId('mailbox-option').map((o) => o.dataset.mailboxId)])),
+      ...(rest.length ? { _: rest } : {}),
+    }
+    : rest];
 }));
 
 describe('SidebarDomainInboxes', () => {
@@ -79,9 +87,10 @@ describe('SidebarDomainInboxes', () => {
     expect(screen.queryByTestId('company-folder')).toBeNull();
   });
 
-  it('puts inboxes in one folder per company, the rest under Other', () => {
+  it('puts inboxes in one folder per company, with no Other folder', () => {
     renderList({ companies: { m: 'Synapse', q: 'Synapse', p: 'Acme' } });
     expect(folders()).toEqual({ Acme: ['ratify-inbox'], Synapse: ['cobalt-inbox', 'sayit-inbox'] });
+    expect(loose()).toEqual([]);
   });
 
   it('folds a company away, shows its unread total, and remembers it', () => {
@@ -93,7 +102,8 @@ describe('SidebarDomainInboxes', () => {
     expect(within(synapse).getByTestId('company-folder-toggle')).toHaveAttribute('aria-expanded', 'false');
     unmount();
     renderList({ companies: { m: 'Synapse', q: 'Synapse' } });
-    expect(folders()).toEqual({ Synapse: [], mailbox_group_other: ['ratify-inbox'] });
+    expect(folders()).toEqual({ Synapse: [] });
+    expect(loose()).toEqual(['ratify-inbox']);
   });
 
   it('files an inbox under an existing company', async () => {
@@ -104,7 +114,7 @@ describe('SidebarDomainInboxes', () => {
     expect(saveMock).toHaveBeenCalledWith(expect.anything(), 'q', { tag: 'project', company: 'Synapse' });
     expect(layout()).toEqual({
       mailbox_section_project: { Synapse: ['sayit-inbox'] },
-      mailbox_section_untagged: { Synapse: ['cobalt-inbox'], mailbox_group_other: ['ratify-inbox'] },
+      mailbox_section_untagged: { Synapse: ['cobalt-inbox'], _: ['ratify-inbox'] },
     });
   });
 
@@ -115,7 +125,8 @@ describe('SidebarDomainInboxes', () => {
     fireEvent.change(screen.getByTestId('mailbox-company-input'), { target: { value: '  Synapse ' } });
     fireEvent.click(screen.getByTestId('mailbox-company-save'));
     expect(saveMock).toHaveBeenCalledWith(expect.anything(), 'm', { company: 'Synapse' });
-    expect(folders()).toEqual({ Synapse: ['cobalt-inbox'], mailbox_group_other: ['ratify-inbox', 'sayit-inbox'] });
+    expect(folders()).toEqual({ Synapse: ['cobalt-inbox'] });
+    expect(loose()).toEqual(['ratify-inbox', 'sayit-inbox']);
   });
 
   it('takes an inbox out of its company with None, keeping its tag', async () => {
@@ -149,7 +160,7 @@ describe('SidebarDomainInboxes', () => {
   it('splits typed inboxes into Business and Projects sections, each with its own company folders', () => {
     renderList({ tags: { m: 'business', p: 'project', q: 'business' }, companies: { m: 'Synapse', p: 'Synapse' } });
     expect(layout()).toEqual({
-      mailbox_section_business: { Synapse: ['cobalt-inbox'], mailbox_group_other: ['sayit-inbox'] },
+      mailbox_section_business: { Synapse: ['cobalt-inbox'], _: ['sayit-inbox'] },
       mailbox_section_project: { Synapse: ['ratify-inbox'] },
     });
     expect(screen.getAllByTestId('type-section').map((s) => s.dataset.section)).toEqual(['business', 'project']);
@@ -237,5 +248,79 @@ describe('mailbox tag store', () => {
     expect(useMailboxTagStore.getState().tags).toEqual({ p: 'business' });
     finishSave();
     await saving;
+  });
+
+  describe('folders, spam and search', () => {
+    const rich: DomainInbox[] = [
+      { ...inboxes[0], junk: { id: 'cobalt-junk', total: 2, unread: 1 }, folderIds: ['cobalt-sent', 'cobalt-junk'] },
+      { ...inboxes[1], junk: { id: 'ratify-junk', total: 0, unread: 0 }, folderIds: ['ratify-junk'] },
+      inboxes[2],
+    ];
+    const renderRich = (selected = 'ratify-inbox', onSelect = vi.fn()) => {
+      useMailboxTagStore.setState({ tags: { m: 'business', p: 'project', q: 'project' }, companies: { p: 'Acme' } });
+      const renderFolders = vi.fn((inbox: DomainInbox, depth: number) => <span data-testid="folders-of" data-depth={depth}>{inbox.label}</span>);
+      render(<SidebarDomainInboxes inboxes={rich} selectedMailbox={selected} onSelect={onSelect} isCollapsed={false} renderFolders={renderFolders} />);
+      return { onSelect, renderFolders };
+    };
+    const section = (name: string) => screen.getAllByTestId('type-section').find((s) => s.dataset.section === name)!;
+
+    it('opens an inbox to its other folders, and remembers that', () => {
+      renderRich();
+      expect(screen.queryByTestId('folders-of')).toBeNull();
+      expect(within(rowOf('sayit-inbox')).queryByTestId('mailbox-folders-toggle')).toBeNull();
+      fireEvent.click(within(rowOf('cobalt-inbox')).getByTestId('mailbox-folders-toggle'));
+      expect(within(rowOf('cobalt-inbox')).getByTestId('folders-of')).toHaveTextContent('cobalt.boutique');
+      expect(JSON.parse(localStorage.getItem('sidebarOpenDomainInboxes')!)).toEqual(['cobalt-inbox']);
+    });
+
+    it('keeps the folders open while one of them is the open folder', () => {
+      renderRich('cobalt-sent');
+      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-folders-toggle')).toHaveAttribute('aria-expanded', 'true');
+      expect(within(rowOf('cobalt-inbox')).getByTestId('folders-of')).toBeInTheDocument();
+    });
+
+    it('shows spam on the row while there is any, and opens it on click', () => {
+      const { onSelect } = renderRich();
+      const chip = within(rowOf('cobalt-inbox')).getByTestId('mailbox-junk');
+      expect(chip).toHaveTextContent('2');
+      expect(chip).toHaveAttribute('data-unread', '1');
+      expect(within(rowOf('ratify-inbox')).queryByTestId('mailbox-junk')).toBeNull();
+      fireEvent.click(chip);
+      expect(onSelect).toHaveBeenCalledWith('cobalt-junk');
+    });
+
+    it('lists an inbox with no company beside the company folders, not under Other', () => {
+      renderRich();
+      expect(layout()).toEqual({
+        mailbox_section_business: ['cobalt-inbox'],
+        mailbox_section_project: { Acme: ['ratify-inbox'], _: ['sayit-inbox'] },
+      });
+    });
+
+    it('searches one section from its heading, by domain or company, and closes with Escape', () => {
+      renderRich();
+      fireEvent.click(within(section('project')).getByTestId('type-section-search-open'));
+      const input = within(section('project')).getByTestId('type-section-search');
+      expect(input).toHaveFocus();
+      fireEvent.change(input, { target: { value: 'SAY' } });
+      expect(layout().mailbox_section_project).toEqual(['sayit-inbox']);
+      expect(layout().mailbox_section_business).toEqual(['cobalt-inbox']);
+      fireEvent.change(input, { target: { value: 'acme' } });
+      expect(layout().mailbox_section_project).toEqual({ Acme: ['ratify-inbox'] });
+      fireEvent.change(input, { target: { value: 'zzz' } });
+      expect(within(section('project')).getByTestId('type-section-empty')).toBeInTheDocument();
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(within(section('project')).queryByTestId('type-section-search')).toBeNull();
+      expect(layout().mailbox_section_project).toEqual({ Acme: ['ratify-inbox'], _: ['sayit-inbox'] });
+    });
+
+    it('shows matches inside folded sections and folders while searching', () => {
+      renderRich();
+      fireEvent.click(within(section('project')).getByTestId('company-folder-toggle'));
+      fireEvent.click(within(section('project')).getByTestId('type-section-toggle'));
+      fireEvent.click(within(section('project')).getByTestId('type-section-search-open'));
+      fireEvent.change(within(section('project')).getByTestId('type-section-search'), { target: { value: 'ratify' } });
+      expect(layout().mailbox_section_project).toEqual({ Acme: ['ratify-inbox'] });
+    });
   });
 });

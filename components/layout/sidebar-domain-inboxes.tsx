@@ -2,7 +2,7 @@
 
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Briefcase, Building2, Check, ChevronDown, ChevronRight, Loader2, Plus, Rocket, Tag, Users } from "@/components/icons";
+import { Ban, Briefcase, Building2, Check, ChevronDown, ChevronRight, Loader2, Plus, Rocket, Search, Tag, Users, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { MAILBOX_TAGS, MAX_COMPANY_LENGTH, type MailboxTag } from "@/lib/mailbox-tags";
 import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
@@ -19,6 +19,10 @@ export interface DomainInbox {
   unread?: number;
   /** The JMAP account that owns it, which carries its tag and company. */
   accountId: string;
+  /** Its spam folder; the row shows it while it holds mail. */
+  junk?: { id: string; total: number; unread: number };
+  /** Ids of the account's other folders, so a row knows when one of them is open. */
+  folderIds?: string[];
 }
 
 /** How each tag looks wherever it is shown: icon, and a colour that reads in both themes. */
@@ -38,13 +42,14 @@ export const MAILBOX_TAG_STYLE: Record<MailboxTag, { icon: typeof Briefcase; chi
 };
 
 const COLLAPSED_KEY = "sidebarCollapsedCompanies";
+const OPEN_INBOXES_KEY = "sidebarOpenDomainInboxes";
 const OTHER = "\u0000other";
 const SECTION_KEY = "\u0000section:";
 /** Type sections in display order; inboxes without a type come last. */
 const SECTIONS = [...MAILBOX_TAGS, OTHER] as const;
 type Section = (typeof SECTIONS)[number];
-/** Row and folder indents, one step per nesting level. */
-const ROW_INDENT = ["ps-7", "ps-10", "ps-14"] as const;
+/** Row indents (before the folders chevron) and folder indents, one step per nesting level. */
+const ROW_INDENT = ["ps-2", "ps-5", "ps-9"] as const;
 const FOLDER_INDENT = ["ps-3", "ps-6"] as const;
 
 interface Folder {
@@ -56,13 +61,23 @@ interface Folder {
   items: DomainInbox[];
 }
 
-function readCollapsed(): Set<string> {
+function readSet(key: string): Set<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]") as string[]);
+    return new Set(JSON.parse(localStorage.getItem(key) ?? "[]") as string[]);
   } catch {
     return new Set();
   }
 }
+
+function toggled(set: Set<string>, key: string, storageKey: string): Set<string> {
+  const next = new Set(set);
+  if (next.has(key)) next.delete(key); else next.add(key);
+  try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch { /* storage unavailable */ }
+  return next;
+}
+
+const matches = (query: string, ...texts: (string | undefined)[]) =>
+  texts.some((text) => !!text && text.toLowerCase().includes(query));
 
 const chipClass = (active: boolean, activeStyle?: string) => cn(
   "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ring-inset transition-colors",
@@ -175,16 +190,19 @@ interface SidebarDomainInboxesProps {
   onSelect: (mailboxId: string) => void;
   /** Icon-only sidebar: one icon per inbox, no folders or controls. */
   isCollapsed: boolean;
+  /** The inbox account's other folders (Sent, Spam...), listed under its row at `depth`. */
+  renderFolders?: (inbox: DomainInbox, depth: number) => ReactNode;
 }
 
 /**
- * MailHub: the shared domain inboxes as a sidebar section. Once any inbox is
- * filed under a company, each company becomes a collapsible folder and the rest
- * go under Other. Every row has a button that opens its Type (Business /
- * Project) and Company choices. Loading is done by the mail app
- * (useMailboxTagsLoader).
+ * MailHub: the shared domain inboxes as a sidebar section. Once any inbox has a
+ * type, types become sections (Business, Projects) with a search in their
+ * heading. Each company is a collapsible folder; inboxes with no company sit
+ * beside the folders. A row opens to its other folders, shows its spam while
+ * there is any, and has a button for its Type and Company choices. Loading is
+ * done by the mail app (useMailboxTagsLoader).
  */
-export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCollapsed }: SidebarDomainInboxesProps) {
+export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCollapsed, renderFolders }: SidebarDomainInboxesProps) {
   const t = useTranslations("sidebar");
   const tags = useMailboxTagStore((s) => s.tags);
   const companiesOf = useMailboxTagStore((s) => s.companies);
@@ -192,7 +210,10 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
   const setTag = useMailboxTagStore((s) => s.setTag);
   const setCompany = useMailboxTagStore((s) => s.setCompany);
   const [editing, setEditing] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsed);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => readSet(COLLAPSED_KEY));
+  const [openInboxes, setOpenInboxes] = useState<Set<string>>(() => readSet(OPEN_INBOXES_KEY));
+  // Search per type section, open while the key is present.
+  const [searches, setSearches] = useState<Record<string, string>>({});
 
   const chooserId = useId();
   const listRef = useRef<HTMLDivElement>(null);
@@ -245,15 +266,9 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
   const companiesIn = (items: DomainInbox[]) => [...new Set(items.map(companyOf).filter((c): c is string => !!c))]
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
   const companies = companiesIn(inboxes);
-  // One folder per company, the rest under Other; none at all while no inbox has a company.
-  const foldersOf = (items: DomainInbox[], scope: string): Folder[] => {
-    const names = companiesIn(items);
-    if (!names.length) return [];
-    return [
-      ...names.map((name) => ({ key: scope + name, name, company: name, items: items.filter((i) => companyOf(i) === name) })),
-      { key: scope + OTHER, name: t("mailbox_group_other"), company: "", items: items.filter((i) => !companyOf(i)) },
-    ].filter((folder) => folder.items.length > 0);
-  };
+  // One folder per company; inboxes with no company are listed beside them.
+  const foldersOf = (items: DomainInbox[], scope: string): Folder[] =>
+    companiesIn(items).map((name) => ({ key: scope + name, name, company: name, items: items.filter((i) => companyOf(i) === name) }));
   // Type sections (Business, Projects, untagged) appear once any inbox has a type.
   const sectionOf = (inbox: DomainInbox): Section => tagOf(inbox) ?? OTHER;
   const sections = inboxes.some(tagOf)
@@ -262,14 +277,10 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
         .filter(({ items }) => items.length > 0)
     : [];
 
-  const toggleFolder = (key: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next])); } catch { /* storage unavailable */ }
-      return next;
-    });
-  };
+  const toggleFolder = (key: string) => setCollapsed((prev) => toggled(prev, key, COLLAPSED_KEY));
+  const toggleInbox = (id: string) => setOpenInboxes((prev) => toggled(prev, id, OPEN_INBOXES_KEY));
+  const isWithin = (inbox: DomainInbox) =>
+    inbox.id === selectedMailbox || (!!selectedMailbox && !!inbox.folderIds?.includes(selectedMailbox));
 
   const closeEditor = (inbox: DomainInbox) => {
     refocus.current = inbox.id;
@@ -291,15 +302,33 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
     const isEditing = editing === inbox.id;
     const isSaving = !!saving[inbox.accountId];
     const TagIcon = tag ? MAILBOX_TAG_STYLE[tag].icon : Tag;
+    const hasFolders = !!renderFolders && !!inbox.folderIds?.length;
+    // A folder of this inbox being open keeps the list open, so the selection stays in view.
+    const showFolders = hasFolders && (openInboxes.has(inbox.id) || (isWithin(inbox) && !isSelected));
+    const junk = inbox.junk && inbox.junk.total > 0 ? inbox.junk : undefined;
     return (
       <div key={inbox.id} data-testid="mailbox-row" data-mailbox-id={inbox.id} data-mailbox-tag={tag ?? ""} data-company={companyOf(inbox) ?? ""}>
         <div
           style={{ paddingBlock: "var(--density-sidebar-py)" }}
           className={cn(
             "group/row flex items-center max-lg:min-h-[44px] text-sm transition-colors duration-150 border-s-2",
+            ROW_INDENT[level],
             isSelected ? "bg-accent text-accent-foreground font-semibold border-primary" : "hover:bg-muted/50 text-foreground border-transparent",
           )}
         >
+          {hasFolders ? (
+            <button
+              type="button"
+              aria-expanded={showFolders}
+              aria-label={t("mailbox_folders_toggle", { mailbox: inbox.label })}
+              title={t("mailbox_folders_toggle", { mailbox: inbox.label })}
+              data-testid="mailbox-folders-toggle"
+              onClick={() => toggleInbox(inbox.id)}
+              className="grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {showFolders ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+          ) : <span className="w-5 shrink-0" aria-hidden="true" />}
           <button
             type="button"
             aria-current={isSelected ? "page" : undefined}
@@ -307,10 +336,7 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
             data-mailbox-id={inbox.id}
             onClick={() => onSelect(inbox.id)}
             title={inbox.sublabel}
-            className={cn(
-              "flex min-w-0 flex-1 items-center gap-2 pe-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-              ROW_INDENT[level],
-            )}
+            className="flex min-w-0 flex-1 items-center gap-2 ps-0.5 pe-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
             <Users className={cn("h-4 w-4 flex-shrink-0", tag ? MAILBOX_TAG_STYLE[tag].text : isSelected ? "text-primary" : "text-muted-foreground")} />
             <span className="min-w-0 flex-1 truncate">
@@ -324,6 +350,28 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
               </span>
             )}
           </button>
+          {junk && (
+            <button
+              type="button"
+              aria-current={junk.id === selectedMailbox ? "page" : undefined}
+              aria-label={t("mailbox_junk_open", { count: junk.total, mailbox: inbox.label })}
+              title={t("mailbox_junk_open", { count: junk.total, mailbox: inbox.label })}
+              data-testid="mailbox-junk"
+              data-unread={junk.unread}
+              onClick={() => onSelect(junk.id)}
+              className={cn(
+                "me-1 inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[11px] font-medium tabular-nums ring-1 ring-inset transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                junk.unread > 0
+                  ? "bg-red-500/10 text-red-700 ring-red-500/30 hover:bg-red-500/20 dark:text-red-300"
+                  : "bg-background text-muted-foreground ring-border hover:text-foreground",
+                junk.id === selectedMailbox && "ring-2 ring-red-500/60",
+              )}
+            >
+              <Ban className="h-3 w-3" />
+              {junk.total > 99 ? "99+" : junk.total}
+            </button>
+          )}
           <button
             type="button"
             aria-expanded={isEditing}
@@ -345,6 +393,11 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
             {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TagIcon className="h-3.5 w-3.5" />}
           </button>
         </div>
+        {showFolders && (
+          <div role="group" aria-label={t("mailbox_folders_toggle", { mailbox: inbox.label })} data-testid="mailbox-folders">
+            {renderFolders!(inbox, level + 1)}
+          </div>
+        )}
         {isEditing && (
           <InboxEditor
             id={chooserId}
@@ -376,7 +429,7 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
     testId: string,
   ) => {
     const unread = items.reduce((sum, inbox) => sum + (inbox.unread ?? 0), 0);
-    const hasSelected = items.some((inbox) => inbox.id === selectedMailbox);
+    const hasSelected = items.some(isWithin);
     return (
       <button
         type="button"
@@ -402,8 +455,8 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
     );
   };
 
-  const companyFolder = (folder: Folder, level: 0 | 1) => {
-    const open = !collapsed.has(folder.key);
+  const companyFolder = (folder: Folder, level: 0 | 1, forceOpen: boolean) => {
+    const open = forceOpen || !collapsed.has(folder.key);
     return (
       <div key={folder.key} role="group" aria-label={folder.name} data-testid="company-folder" data-company={folder.company}>
         {header(folder.key, open, folder.items, FOLDER_INDENT[level], (
@@ -417,13 +470,11 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
     );
   };
 
-  // Companies, or the inboxes themselves while none is filed under a company.
-  const body = (items: DomainInbox[], scope: string, level: 0 | 1) => {
-    const folders = foldersOf(items, scope);
-    return folders.length
-      ? folders.map((folder) => companyFolder(folder, level))
-      : items.map((inbox) => row(inbox, level));
-  };
+  // Company folders, then the inboxes filed under no company at the same level.
+  const body = (items: DomainInbox[], scope: string, level: 0 | 1, forceOpen = false) => [
+    ...foldersOf(items, scope).map((folder) => companyFolder(folder, level, forceOpen)),
+    ...items.filter((inbox) => !companyOf(inbox)).map((inbox) => row(inbox, level)),
+  ];
 
   if (!sections.length) {
     return (
@@ -433,22 +484,81 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
     );
   }
 
+  const closeSearch = (section: Section) => setSearches(({ [section]: _closed, ...rest }) => rest);
+
+  // The section heading, or its search field while the search is open.
+  const sectionHeading = (section: Section, key: string, open: boolean, items: DomainInbox[], name: string) => {
+    const query = searches[section];
+    if (query !== undefined) {
+      return (
+        <div style={{ paddingBlock: "var(--density-sidebar-py)" }} className={cn("flex items-center gap-1.5 pe-2 max-lg:min-h-[44px] border-s-2 border-transparent", FOLDER_INDENT[0])}>
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            type="search"
+            value={query}
+            onChange={(e) => setSearches((prev) => ({ ...prev, [section]: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { e.stopPropagation(); closeSearch(section); }
+            }}
+            placeholder={t("mailbox_search_placeholder", { section: name })}
+            aria-label={t("mailbox_search_placeholder", { section: name })}
+            data-testid="type-section-search"
+            className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden"
+          />
+          <button
+            type="button"
+            aria-label={t("mailbox_search_close")}
+            title={t("mailbox_search_close")}
+            data-testid="type-section-search-close"
+            onClick={() => closeSearch(section)}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      );
+    }
+    const Icon = section === OTHER ? Tag : MAILBOX_TAG_STYLE[section].icon;
+    return (
+      <div className="flex items-center">
+        <div className="min-w-0 flex-1">
+          {header(key, open, items, FOLDER_INDENT[0], (
+            <>
+              <Icon className={cn("h-4 w-4 shrink-0", section === OTHER ? "text-muted-foreground" : MAILBOX_TAG_STYLE[section].text)} />
+              <span className="min-w-0 flex-1 truncate font-semibold">{name}</span>
+            </>
+          ), "type-section-toggle")}
+        </div>
+        <button
+          type="button"
+          aria-label={t("mailbox_search_open", { section: name })}
+          title={t("mailbox_search_open", { section: name })}
+          data-testid="type-section-search-open"
+          onClick={() => setSearches((prev) => ({ ...prev, [section]: "" }))}
+          className="me-2 grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Search className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div ref={listRef} data-testid="domain-inboxes">
       {sections.map(({ section, items }) => {
         const key = SECTION_KEY + section;
-        const open = !collapsed.has(key);
+        const query = searches[section]?.trim().toLowerCase();
+        const shown = query ? items.filter((i) => matches(query, i.label, i.sublabel, companyOf(i))) : items;
+        const open = !!query || !collapsed.has(key);
         const name = section === OTHER ? t("mailbox_section_untagged") : t(`mailbox_section_${section}`);
-        const Icon = section === OTHER ? Tag : MAILBOX_TAG_STYLE[section].icon;
         return (
           <div key={section} role="group" aria-label={name} data-testid="type-section" data-section={section === OTHER ? "" : section}>
-            {header(key, open, items, FOLDER_INDENT[0], (
-              <>
-                <Icon className={cn("h-4 w-4 shrink-0", section === OTHER ? "text-muted-foreground" : MAILBOX_TAG_STYLE[section].text)} />
-                <span className="min-w-0 flex-1 truncate font-semibold">{name}</span>
-              </>
-            ), "type-section-toggle")}
-            {open && body(items, `${section}/`, 1)}
+            {sectionHeading(section, key, open, items, name)}
+            {open && body(shown, `${section}/`, 1, !!query)}
+            {open && query && !shown.length && (
+              <p data-testid="type-section-empty" className="py-1.5 ps-9 pe-3 text-xs text-muted-foreground">{t("mailbox_search_empty")}</p>
+            )}
           </div>
         );
       })}
