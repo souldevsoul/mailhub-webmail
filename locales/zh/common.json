@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "搜索{section}",
     "mailbox_search_close": "关闭搜索",
     "mailbox_search_empty": "未找到任何内容",
+    "mailbox_catch_all": "全部地址",
     "mailbox_catch_all_title": "发往 {domain} 任意地址的邮件都会到这里",
     "mailbox_more_addresses": "另有：{addresses}",
     "mailbox_group_domains": "Domain inboxes",

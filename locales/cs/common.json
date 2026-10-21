@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "Hledat: {section}",
     "mailbox_search_close": "Zavřít hledání",
     "mailbox_search_empty": "Nic nenalezeno",
+    "mailbox_catch_all": "všechny adresy",
     "mailbox_catch_all_title": "Sem přichází pošta na libovolnou adresu v {domain}",
     "mailbox_more_addresses": "Také: {addresses}",
     "mailbox_group_domains": "Domain inboxes",

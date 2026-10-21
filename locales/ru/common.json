@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "Поиск: {section}",
     "mailbox_search_close": "Закрыть поиск",
     "mailbox_search_empty": "Ничего не найдено",
+    "mailbox_catch_all": "все адреса",
     "mailbox_catch_all_title": "Сюда приходит почта на любой адрес @{domain}",
     "mailbox_more_addresses": "Также: {addresses}",
     "mailbox_group_domains": "Domain inboxes",

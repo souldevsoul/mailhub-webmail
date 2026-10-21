@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "Caută în {section}",
     "mailbox_search_close": "Închide căutarea",
     "mailbox_search_empty": "Nu s-a găsit nimic",
+    "mailbox_catch_all": "toate adresele",
     "mailbox_catch_all_title": "Aici ajunge corespondența pentru orice adresă de la {domain}",
     "mailbox_more_addresses": "De asemenea: {addresses}",
     "mailbox_group_domains": "Domain inboxes",

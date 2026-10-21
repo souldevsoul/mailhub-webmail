@@ -336,15 +336,17 @@ describe('mailbox tag store', () => {
     it('shows the main address, how many more there are, and whether the inbox catches all', () => {
       seed();
       render(<SidebarDomainInboxes inboxes={inboxes} selectedMailbox="" onSelect={vi.fn()} isCollapsed={false} />);
-      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-address')).toHaveTextContent('info@cobalt.boutique');
+      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-option')).toHaveTextContent('cobalt.boutique');
+      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-address')).toHaveTextContent(/^info@$/);
       expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-more-addresses')).toHaveTextContent('+2');
       expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-catch-all')).toBeInTheDocument();
       expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-option').getAttribute('title')).toContain('sales@cobalt.boutique');
-      expect(within(rowOf('ratify-inbox')).getByTestId('mailbox-address')).toHaveTextContent('inbox@ratify.studio');
+      expect(within(rowOf('ratify-inbox')).getByTestId('mailbox-address')).toHaveTextContent(/^inbox@$/);
       expect(within(rowOf('ratify-inbox')).queryByTestId('mailbox-catch-all')).toBeNull();
       expect(within(rowOf('ratify-inbox')).queryByTestId('mailbox-more-addresses')).toBeNull();
-      // No addresses file yet: the domain, as before.
-      expect(within(rowOf('sayit-inbox')).getByTestId('mailbox-address')).toHaveTextContent('say-it.online');
+      // No addresses file yet: the domain alone, as before.
+      expect(within(rowOf('sayit-inbox')).queryByTestId('mailbox-address')).toBeNull();
+      expect(within(rowOf('sayit-inbox')).getByTestId('mailbox-option')).toHaveTextContent('say-it.online');
     });
 
     it('finds an inbox by any of its addresses', () => {

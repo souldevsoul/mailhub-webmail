@@ -350,22 +350,27 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
             className="flex min-w-0 flex-1 items-center gap-2 ps-0.5 pe-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
             <Users className={cn("h-4 w-4 flex-shrink-0", tag ? MAILBOX_TAG_STYLE[tag].text : isSelected ? "text-primary" : "text-muted-foreground")} />
-            <span className="min-w-0 flex-1 truncate" data-testid="mailbox-address">{addressOf(inbox)}</span>
-            {extraAddresses > 0 && (
-              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground" data-testid="mailbox-more-addresses">
-                +{extraAddresses}
-                <span className="sr-only">, {t("mailbox_more_addresses", { addresses: known!.addresses.slice(1).join(", ") })}</span>
-              </span>
-            )}
-            {known?.catchAll && (
-              <span
-                data-testid="mailbox-catch-all"
-                className="shrink-0 rounded px-1 text-[10px] font-medium leading-4 text-muted-foreground ring-1 ring-inset ring-border"
-              >
-                <span aria-hidden="true">*@</span>
-                <span className="sr-only">, {t("mailbox_catch_all_title", { domain: known.addresses[0].split("@")[1] })}</span>
-              </span>
-            )}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{inbox.label}</span>
+              {/* Which mailbox it is: the domain alone does not say whether this is info@ or a catch-all. */}
+              {known && (
+                <span className="block truncate text-[11px] font-normal leading-4 text-muted-foreground">
+                  <span data-testid="mailbox-address">{known.addresses[0].split("@")[0]}@</span>
+                  {extraAddresses > 0 && (
+                    <span className="tabular-nums" data-testid="mailbox-more-addresses">
+                      {` +${extraAddresses}`}
+                      <span className="sr-only">, {t("mailbox_more_addresses", { addresses: known.addresses.slice(1).join(", ") })}</span>
+                    </span>
+                  )}
+                  {known.catchAll && (
+                    <span data-testid="mailbox-catch-all">
+                      {" · "}{t("mailbox_catch_all")}
+                      <span className="sr-only">, {t("mailbox_catch_all_title", { domain: inbox.label })}</span>
+                    </span>
+                  )}
+                </span>
+              )}
+            </span>
             {!!inbox.unread && (
               <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
                 {inbox.unread > 999 ? "999+" : inbox.unread}

@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "Cerca in {section}",
     "mailbox_search_close": "Chiudi ricerca",
     "mailbox_search_empty": "Nessun risultato",
+    "mailbox_catch_all": "tutti gli indirizzi",
     "mailbox_catch_all_title": "Qui arriva la posta per qualsiasi indirizzo di {domain}",
     "mailbox_more_addresses": "Anche: {addresses}",
     "mailbox_group_domains": "Domain inboxes",

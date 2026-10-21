@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "{section} içinde ara",
     "mailbox_search_close": "Aramayı kapat",
     "mailbox_search_empty": "Hiçbir şey bulunamadı",
+    "mailbox_catch_all": "tüm adresler",
     "mailbox_catch_all_title": "{domain} alanındaki herhangi bir adrese gelen posta buraya düşer",
     "mailbox_more_addresses": "Ayrıca: {addresses}",
     "mailbox_group_domains": "Domain inboxes",

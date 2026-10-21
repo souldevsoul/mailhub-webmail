@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "البحث في {section}",
     "mailbox_search_close": "إغلاق البحث",
     "mailbox_search_empty": "لم يتم العثور على شيء",
+    "mailbox_catch_all": "كل العناوين",
     "mailbox_catch_all_title": "يصل هنا البريد المرسل إلى أي عنوان في {domain}",
     "mailbox_more_addresses": "أيضًا: {addresses}",
     "mailbox_group_domains": "Domain inboxes",

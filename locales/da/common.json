@@ -96,6 +96,7 @@
     "mailbox_search_placeholder": "Søg i {section}",
     "mailbox_search_close": "Luk søgning",
     "mailbox_search_empty": "Intet fundet",
+    "mailbox_catch_all": "alle adresser",
     "mailbox_catch_all_title": "Post til enhver adresse hos {domain} lander her",
     "mailbox_more_addresses": "Også: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
