@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "Cerca a {section}",
     "mailbox_search_close": "Tanca la cerca",
     "mailbox_search_empty": "No s'ha trobat res",
+    "mailbox_catch_all_title": "Aquí arriba el correu de qualsevol adreça de {domain}",
+    "mailbox_more_addresses": "També: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "Søk i {section}",
     "mailbox_search_close": "Lukk søk",
     "mailbox_search_empty": "Ingenting funnet",
+    "mailbox_catch_all_title": "E-post til enhver adresse hos {domain} kommer hit",
+    "mailbox_more_addresses": "Også: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

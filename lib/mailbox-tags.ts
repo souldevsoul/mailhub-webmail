@@ -11,12 +11,22 @@
 export type MailboxTag = 'business' | 'project';
 export const MAILBOX_TAGS: readonly MailboxTag[] = ['business', 'project'];
 export const MAILBOX_TAG_FILE = '.mailhub-mailbox.json';
+/** Written by the server (bin/mailctl), read-only here: the inbox's real addresses. */
+export const MAILBOX_ADDRESS_FILE = '.mailhub-addresses.json';
 export const MAX_COMPANY_LENGTH = 40;
+const MAX_ADDRESSES = 50;
 
 /** What is stored for one shared inbox. Both parts are optional. */
 export interface MailboxMeta {
   tag?: MailboxTag;
   company?: string;
+}
+
+/** The addresses that deliver into one shared inbox, main one first. */
+export interface MailboxAddresses {
+  addresses: string[];
+  /** Mail to any other address at the domain lands here too. */
+  catchAll: boolean;
 }
 
 type MethodCall = [string, Record<string, unknown>, string];
@@ -59,27 +69,44 @@ export function parseMailboxMeta(text: string): MailboxMeta | null {
   return meta.tag || meta.company ? meta : null;
 }
 
+/** The addresses file, or null when it is missing or malformed. */
+export function parseMailboxAddresses(text: string): MailboxAddresses | null {
+  let raw: { addresses?: unknown; catchAll?: unknown };
+  try {
+    raw = JSON.parse(text) ?? {};
+  } catch {
+    return null;
+  }
+  const addresses = (Array.isArray(raw.addresses) ? raw.addresses : [])
+    .filter((a): a is string => typeof a === 'string' && /^[^\s@]+@[^\s@]+$/.test(a))
+    .map((a) => a.toLowerCase())
+    .slice(0, MAX_ADDRESSES);
+  return addresses.length ? { addresses: [...new Set(addresses)], catchAll: raw.catchAll === true } : null;
+}
+
+/** MailHub's own files at the root of a shared account; hidden from the Files view. */
 export function isMailboxTagFile(node: { name?: string | null; parentId?: string | null }): boolean {
-  return node.name === MAILBOX_TAG_FILE && (node.parentId ?? null) === null;
+  return (node.name === MAILBOX_TAG_FILE || node.name === MAILBOX_ADDRESS_FILE) && (node.parentId ?? null) === null;
 }
 
 interface TagNode { id: string; blobId: string }
 
 /**
- * The tag files of each account (normally one; two members tagging an untagged
- * inbox at the same moment can leave two). One request for all accounts.
+ * The root files named `fileName` in each account (normally one; two members
+ * tagging an untagged inbox at the same moment can leave two). One request for
+ * all accounts.
  */
-async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, TagNode[]>> {
+async function findTagNodes(client: MailboxTagClient, accountIds: string[], fileName = MAILBOX_TAG_FILE): Promise<Record<string, TagNode[]>> {
   if (accountIds.length === 0) return {};
   // Two calls per account; split so no request exceeds the server's call limit.
   const perRequest = Math.max(1, Math.floor((client.getMaxCallsInRequest?.() ?? DEFAULT_MAX_CALLS) / 2));
   if (accountIds.length > perRequest) {
     const parts: Promise<Record<string, TagNode[]>>[] = [];
-    for (let i = 0; i < accountIds.length; i += perRequest) parts.push(findTagNodes(client, accountIds.slice(i, i + perRequest)));
+    for (let i = 0; i < accountIds.length; i += perRequest) parts.push(findTagNodes(client, accountIds.slice(i, i + perRequest), fileName));
     return Object.assign({}, ...(await Promise.all(parts)));
   }
   const calls: MethodCall[] = accountIds.flatMap((accountId, i): MethodCall[] => [
-    ['FileNode/query', { accountId, filter: { name: MAILBOX_TAG_FILE } }, `q${i}`],
+    ['FileNode/query', { accountId, filter: { name: fileName } }, `q${i}`],
     ['FileNode/get', {
       accountId,
       '#ids': { resultOf: `q${i}`, name: 'FileNode/query', path: '/ids' },
@@ -92,28 +119,38 @@ async function findTagNodes(client: MailboxTagClient, accountIds: string[]): Pro
     if (name !== 'FileNode/get' || !callId.startsWith('g')) continue;
     const accountId = accountIds[Number(callId.slice(1))];
     const list = (args.list ?? []) as { id: string; name: string; parentId: string | null; blobId: string }[];
-    const nodes = list.filter(isMailboxTagFile).map((n) => ({ id: n.id, blobId: n.blobId }));
+    const nodes = list.filter((n) => n.name === fileName && (n.parentId ?? null) === null).map((n) => ({ id: n.id, blobId: n.blobId }));
     if (accountId && nodes.length) found[accountId] = nodes;
   }
   return found;
 }
 
-/** Tag and company of the given shared accounts; accounts with neither are left out. */
-export async function loadMailboxMeta(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, MailboxMeta>> {
-  const nodes = await findTagNodes(client, accountIds);
+/** Reads one root JSON file per account and parses it; accounts without a usable file are left out. */
+async function loadRootFile<T>(client: MailboxTagClient, accountIds: string[], fileName: string, parse: (text: string) => T | null): Promise<Record<string, T>> {
+  const nodes = await findTagNodes(client, accountIds, fileName);
   const entries = await Promise.all(
     Object.entries(nodes).map(async ([accountId, [node]]) => {
       try {
-        const blob = await client.fetchBlob(node.blobId, MAILBOX_TAG_FILE, 'application/json', accountId);
-        return [accountId, parseMailboxMeta(await blob.text())] as const;
+        const blob = await client.fetchBlob(node.blobId, fileName, 'application/json', accountId);
+        return [accountId, parse(await blob.text())] as const;
       } catch {
         return [accountId, null] as const;
       }
     }),
   );
-  const found: Record<string, MailboxMeta> = {};
-  for (const [accountId, meta] of entries) if (meta) found[accountId] = meta;
+  const found: Record<string, T> = {};
+  for (const [accountId, value] of entries) if (value) found[accountId] = value;
   return found;
+}
+
+/** Tag and company of the given shared accounts; accounts with neither are left out. */
+export function loadMailboxMeta(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, MailboxMeta>> {
+  return loadRootFile(client, accountIds, MAILBOX_TAG_FILE, parseMailboxMeta);
+}
+
+/** The addresses of the given shared accounts, as the server wrote them. */
+export function loadMailboxAddresses(client: MailboxTagClient, accountIds: string[]): Promise<Record<string, MailboxAddresses>> {
+  return loadRootFile(client, accountIds, MAILBOX_ADDRESS_FILE, parseMailboxAddresses);
 }
 
 function setResult(response: Awaited<ReturnType<MailboxTagClient['filesRequest']>>): void {

@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "{section} を検索",
     "mailbox_search_close": "検索を閉じる",
     "mailbox_search_empty": "見つかりませんでした",
+    "mailbox_catch_all_title": "{domain} のどのアドレス宛てのメールもここに届きます",
+    "mailbox_more_addresses": "ほかのアドレス: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

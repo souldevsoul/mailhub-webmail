@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "{section} 검색",
     "mailbox_search_close": "검색 닫기",
     "mailbox_search_empty": "찾을 수 없음",
+    "mailbox_catch_all_title": "{domain}의 모든 주소로 온 메일이 여기로 옵니다",
+    "mailbox_more_addresses": "추가 주소: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

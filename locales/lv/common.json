@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "Meklēt: {section}",
     "mailbox_search_close": "Aizvērt meklēšanu",
     "mailbox_search_empty": "Nekas nav atrasts",
+    "mailbox_catch_all_title": "Šeit nonāk pasts uz jebkuru {domain} adresi",
+    "mailbox_more_addresses": "Arī: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

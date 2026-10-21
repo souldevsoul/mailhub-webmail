@@ -97,6 +97,8 @@
     "mailbox_search_placeholder": "Hľadať: {section}",
     "mailbox_search_close": "Zavrieť hľadanie",
     "mailbox_search_empty": "Nič sa nenašlo",
+    "mailbox_catch_all_title": "Sem prichádza pošta na akúkoľvek adresu v {domain}",
+    "mailbox_more_addresses": "Tiež: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

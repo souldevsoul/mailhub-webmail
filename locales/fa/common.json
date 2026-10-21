@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "جستجو در {section}",
     "mailbox_search_close": "بستن جستجو",
     "mailbox_search_empty": "چیزی پیدا نشد",
+    "mailbox_catch_all_title": "نامه به هر نشانی در {domain} به اینجا می‌رسد",
+    "mailbox_more_addresses": "همچنین: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

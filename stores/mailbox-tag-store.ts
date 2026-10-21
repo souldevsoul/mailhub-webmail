@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useAuthStore } from '@/stores/auth-store';
-import { isMailboxTagClient, loadMailboxMeta, normalizeCompany, saveMailboxMeta, type MailboxMeta, type MailboxTag } from '@/lib/mailbox-tags';
+import { isMailboxTagClient, loadMailboxAddresses, loadMailboxMeta, normalizeCompany, saveMailboxMeta, type MailboxAddresses, type MailboxMeta, type MailboxTag } from '@/lib/mailbox-tags';
 
 /** MailHub: Business / Project tags and companies of the shared domain inboxes this login reads. */
 interface MailboxTagState {
@@ -8,6 +8,8 @@ interface MailboxTagState {
   tags: Record<string, MailboxTag>;
   /** Shared account id -> company. Accounts filed under none are absent. */
   companies: Record<string, string>;
+  /** Shared account id -> its real addresses (server-written, read-only). */
+  addresses: Record<string, MailboxAddresses>;
   /** Account id -> number of changes still being saved. */
   saving: Record<string, number>;
   /** The account set this was last loaded for (sorted, joined). */
@@ -57,6 +59,7 @@ export const useMailboxTagStore = create<MailboxTagState>()((set, get) => {
   return {
     tags: {},
     companies: {},
+    addresses: {},
     saving: {},
     loadedFor: null,
 
@@ -66,7 +69,11 @@ export const useMailboxTagStore = create<MailboxTagState>()((set, get) => {
       if (!isMailboxTagClient(client) || (get().loadedFor === key && !options?.force)) return;
       set({ loadedFor: key });
       try {
-        const loaded = await loadMailboxMeta(client, accountIds);
+        // The addresses are optional: a failed read of them must not lose the tags.
+        const [loaded, addresses] = await Promise.all([
+          loadMailboxMeta(client, accountIds),
+          loadMailboxAddresses(client, accountIds).catch(() => get().addresses),
+        ]);
         if (get().loadedFor !== key) return;
         const tags: Record<string, MailboxTag> = {};
         const companies: Record<string, string> = {};
@@ -80,7 +87,7 @@ export const useMailboxTagStore = create<MailboxTagState>()((set, get) => {
           if (localTags[accountId]) tags[accountId] = localTags[accountId]; else delete tags[accountId];
           if (localCompanies[accountId]) companies[accountId] = localCompanies[accountId]; else delete companies[accountId];
         }
-        set({ tags, companies });
+        set({ tags, companies, addresses });
       } catch (error) {
         // Nothing loaded is a usable state; the next load retries.
         console.warn('[MailboxTags] load failed:', error);
@@ -91,6 +98,6 @@ export const useMailboxTagStore = create<MailboxTagState>()((set, get) => {
     setTag: (accountId, tag) => change(accountId, { tag: tag ?? undefined }),
     setCompany: (accountId, company) => change(accountId, { company: normalizeCompany(company) }),
 
-    reset: () => set({ tags: {}, companies: {}, saving: {}, loadedFor: null }),
+    reset: () => set({ tags: {}, companies: {}, addresses: {}, saving: {}, loadedFor: null }),
   };
 });

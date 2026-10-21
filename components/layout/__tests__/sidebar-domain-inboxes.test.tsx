@@ -323,4 +323,37 @@ describe('mailbox tag store', () => {
       expect(layout().mailbox_section_project).toEqual({ Acme: ['ratify-inbox'] });
     });
   });
+
+  describe('addresses', () => {
+    const seed = () => useMailboxTagStore.setState({
+      tags: { m: 'business', p: 'business' }, companies: {},
+      addresses: {
+        m: { addresses: ['info@cobalt.boutique', 'sales@cobalt.boutique', 'inbox@cobalt.boutique'], catchAll: true },
+        p: { addresses: ['inbox@ratify.studio'], catchAll: false },
+      },
+    });
+
+    it('shows the main address, how many more there are, and whether the inbox catches all', () => {
+      seed();
+      render(<SidebarDomainInboxes inboxes={inboxes} selectedMailbox="" onSelect={vi.fn()} isCollapsed={false} />);
+      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-address')).toHaveTextContent('info@cobalt.boutique');
+      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-more-addresses')).toHaveTextContent('+2');
+      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-catch-all')).toBeInTheDocument();
+      expect(within(rowOf('cobalt-inbox')).getByTestId('mailbox-option').getAttribute('title')).toContain('sales@cobalt.boutique');
+      expect(within(rowOf('ratify-inbox')).getByTestId('mailbox-address')).toHaveTextContent('inbox@ratify.studio');
+      expect(within(rowOf('ratify-inbox')).queryByTestId('mailbox-catch-all')).toBeNull();
+      expect(within(rowOf('ratify-inbox')).queryByTestId('mailbox-more-addresses')).toBeNull();
+      // No addresses file yet: the domain, as before.
+      expect(within(rowOf('sayit-inbox')).getByTestId('mailbox-address')).toHaveTextContent('say-it.online');
+    });
+
+    it('finds an inbox by any of its addresses', () => {
+      seed();
+      render(<SidebarDomainInboxes inboxes={inboxes} selectedMailbox="" onSelect={vi.fn()} isCollapsed={false} />);
+      const business = screen.getAllByTestId('type-section').find((s) => s.dataset.section === 'business')!;
+      fireEvent.click(within(business).getByTestId('type-section-search-open'));
+      fireEvent.change(within(business).getByTestId('type-section-search'), { target: { value: 'sales@' } });
+      expect(within(business).getAllByTestId('mailbox-option').map((o) => o.dataset.mailboxId)).toEqual(['cobalt-inbox']);
+    });
+  });
 });

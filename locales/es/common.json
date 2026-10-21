@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "Buscar en {section}",
     "mailbox_search_close": "Cerrar búsqueda",
     "mailbox_search_empty": "No se encontró nada",
+    "mailbox_catch_all_title": "Aquí llega el correo de cualquier dirección de {domain}",
+    "mailbox_more_addresses": "También: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

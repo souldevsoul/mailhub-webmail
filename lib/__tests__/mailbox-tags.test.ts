@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { loadMailboxMeta, saveMailboxMeta, parseMailboxMeta, normalizeCompany, isMailboxTagFile, MAILBOX_TAG_FILE, type MailboxTagClient } from '../mailbox-tags';
+import { loadMailboxMeta, saveMailboxMeta, parseMailboxMeta, parseMailboxAddresses, normalizeCompany, isMailboxTagFile, MAILBOX_TAG_FILE, MAILBOX_ADDRESS_FILE, type MailboxTagClient } from '../mailbox-tags';
 
 // MailHub: Business/Project tags of shared domain inboxes live in a small JSON
 // file at the root of each shared account's file storage.
@@ -114,5 +114,19 @@ describe('mailbox tags', () => {
     (client.filesRequest as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({ methodResponses: [['FileNode/get', { list: [] }, 'g0']] }))
       .mockImplementationOnce(async () => ({ methodResponses: [['FileNode/set', { notCreated: { tag: { description: 'forbidden' } } }, 's0']] }));
     await expect(saveMailboxMeta(client, 'm', { tag: 'project' })).rejects.toThrow('forbidden');
+  });
+
+  it('reads the server-written addresses file, keeping only real addresses', () => {
+    expect(parseMailboxAddresses('{"addresses":["Info@Shop.com","sales@shop.com","info@shop.com"],"catchAll":true}'))
+      .toEqual({ addresses: ['info@shop.com', 'sales@shop.com'], catchAll: true });
+    expect(parseMailboxAddresses('{"addresses":["not an address",42],"catchAll":true}')).toBeNull();
+    expect(parseMailboxAddresses('{"addresses":["inbox@shop.com"]}')).toEqual({ addresses: ['inbox@shop.com'], catchAll: false });
+    expect(parseMailboxAddresses('nope')).toBeNull();
+  });
+
+  it('hides both MailHub files at the root, and only there', () => {
+    expect(isMailboxTagFile({ name: MAILBOX_ADDRESS_FILE, parentId: null })).toBe(true);
+    expect(isMailboxTagFile({ name: MAILBOX_TAG_FILE, parentId: null })).toBe(true);
+    expect(isMailboxTagFile({ name: MAILBOX_ADDRESS_FILE, parentId: 'folder' })).toBe(false);
   });
 });

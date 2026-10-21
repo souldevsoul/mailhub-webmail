@@ -206,6 +206,7 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
   const t = useTranslations("sidebar");
   const tags = useMailboxTagStore((s) => s.tags);
   const companiesOf = useMailboxTagStore((s) => s.companies);
+  const addressesOf = useMailboxTagStore((s) => s.addresses);
   const saving = useMailboxTagStore((s) => s.saving);
   const setTag = useMailboxTagStore((s) => s.setTag);
   const setCompany = useMailboxTagStore((s) => s.setCompany);
@@ -231,6 +232,14 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
   });
 
   const tagOf = (inbox: DomainInbox) => tags[inbox.accountId];
+  // The inbox's main address once the server has listed them; the domain until then.
+  const addressOf = (inbox: DomainInbox) => addressesOf[inbox.accountId]?.addresses[0] ?? inbox.label;
+  const titleOf = (inbox: DomainInbox) => {
+    const known = addressesOf[inbox.accountId];
+    if (!known) return inbox.sublabel;
+    const domain = known.addresses[0].split("@")[1];
+    return [known.addresses.join(", "), known.catchAll ? t("mailbox_catch_all_title", { domain }) : ""].filter(Boolean).join("\n");
+  };
   const companyOf = (inbox: DomainInbox) => companiesOf[inbox.accountId];
 
   if (isCollapsed) {
@@ -244,8 +253,8 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
               key={inbox.id}
               type="button"
               onClick={() => onSelect(inbox.id)}
-              title={inbox.label}
-              aria-label={inbox.label}
+              title={addressOf(inbox)}
+              aria-label={addressOf(inbox)}
               aria-current={isSelected ? "page" : undefined}
               data-testid="mailbox-option"
               data-mailbox-id={inbox.id}
@@ -306,6 +315,8 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
     // A folder of this inbox being open keeps the list open, so the selection stays in view.
     const showFolders = hasFolders && (openInboxes.has(inbox.id) || (isWithin(inbox) && !isSelected));
     const junk = inbox.junk && inbox.junk.total > 0 ? inbox.junk : undefined;
+    const known = addressesOf[inbox.accountId];
+    const extraAddresses = known ? known.addresses.length - 1 : 0;
     return (
       <div key={inbox.id} data-testid="mailbox-row" data-mailbox-id={inbox.id} data-mailbox-tag={tag ?? ""} data-company={companyOf(inbox) ?? ""}>
         <div
@@ -335,15 +346,26 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
             data-testid="mailbox-option"
             data-mailbox-id={inbox.id}
             onClick={() => onSelect(inbox.id)}
-            title={inbox.sublabel}
+            title={titleOf(inbox)}
             className="flex min-w-0 flex-1 items-center gap-2 ps-0.5 pe-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
             <Users className={cn("h-4 w-4 flex-shrink-0", tag ? MAILBOX_TAG_STYLE[tag].text : isSelected ? "text-primary" : "text-muted-foreground")} />
-            <span className="min-w-0 flex-1 truncate">
-              {inbox.label}
-              {/* The domain already names the inbox; its address stays for screen readers and the hover title. */}
-              {inbox.sublabel && <span className="sr-only">, {inbox.sublabel}</span>}
-            </span>
+            <span className="min-w-0 flex-1 truncate" data-testid="mailbox-address">{addressOf(inbox)}</span>
+            {extraAddresses > 0 && (
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground" data-testid="mailbox-more-addresses">
+                +{extraAddresses}
+                <span className="sr-only">, {t("mailbox_more_addresses", { addresses: known!.addresses.slice(1).join(", ") })}</span>
+              </span>
+            )}
+            {known?.catchAll && (
+              <span
+                data-testid="mailbox-catch-all"
+                className="shrink-0 rounded px-1 text-[10px] font-medium leading-4 text-muted-foreground ring-1 ring-inset ring-border"
+              >
+                <span aria-hidden="true">*@</span>
+                <span className="sr-only">, {t("mailbox_catch_all_title", { domain: known.addresses[0].split("@")[1] })}</span>
+              </span>
+            )}
             {!!inbox.unread && (
               <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
                 {inbox.unread > 999 ? "999+" : inbox.unread}
@@ -549,7 +571,7 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
       {sections.map(({ section, items }) => {
         const key = SECTION_KEY + section;
         const query = searches[section]?.trim().toLowerCase();
-        const shown = query ? items.filter((i) => matches(query, i.label, i.sublabel, companyOf(i))) : items;
+        const shown = query ? items.filter((i) => matches(query, i.label, i.sublabel, companyOf(i), ...(addressesOf[i.accountId]?.addresses ?? []))) : items;
         const open = !!query || !collapsed.has(key);
         const name = section === OTHER ? t("mailbox_section_untagged") : t(`mailbox_section_${section}`);
         return (

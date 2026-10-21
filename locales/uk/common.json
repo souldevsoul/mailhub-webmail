@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "Пошук: {section}",
     "mailbox_search_close": "Закрити пошук",
     "mailbox_search_empty": "Нічого не знайдено",
+    "mailbox_catch_all_title": "Сюди надходить пошта на будь-яку адресу @{domain}",
+    "mailbox_more_addresses": "Також: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",

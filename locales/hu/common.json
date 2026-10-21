@@ -96,6 +96,8 @@
     "mailbox_search_placeholder": "Keresés: {section}",
     "mailbox_search_close": "Keresés bezárása",
     "mailbox_search_empty": "Nincs találat",
+    "mailbox_catch_all_title": "Ide érkezik a(z) {domain} bármely címére küldött levél",
+    "mailbox_more_addresses": "Továbbá: {addresses}",
     "mailbox_group_domains": "Domain inboxes",
     "mailbox_tag_business": "Business",
     "mailbox_tag_project": "Project",
