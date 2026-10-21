@@ -197,8 +197,8 @@ interface SidebarDomainInboxesProps {
 /**
  * MailHub: the shared domain inboxes as a sidebar section. Once any inbox has a
  * type, types become sections (Business, Projects) with a search in their
- * heading. Each company is a collapsible folder; inboxes with no company sit
- * beside the folders. A row opens to its other folders, shows its spam while
+ * heading. Business lists its domains plainly; elsewhere each company is a
+ * collapsible folder and inboxes with no company sit beside the folders. A row opens to its other folders, shows its spam while
  * there is any, and has a button for its Type and Company choices. Loading is
  * done by the mail app (useMailboxTagsLoader).
  */
@@ -555,7 +555,8 @@ export function SidebarDomainInboxes({ inboxes, selectedMailbox, onSelect, isCol
         return (
           <div key={section} role="group" aria-label={name} data-testid="type-section" data-section={section === OTHER ? "" : section}>
             {sectionHeading(section, key, open, items, name)}
-            {open && body(shown, `${section}/`, 1, !!query)}
+            {/* Business lists its domains as they are; Projects group theirs by company. */}
+            {open && (section === "business" ? shown.map((inbox) => row(inbox, 1)) : body(shown, `${section}/`, 1, !!query))}
             {open && query && !shown.length && (
               <p data-testid="type-section-empty" className="py-1.5 ps-9 pe-3 text-xs text-muted-foreground">{t("mailbox_search_empty")}</p>
             )}

@@ -157,10 +157,10 @@ describe('SidebarDomainInboxes', () => {
     expect(folders().Synapse).toEqual(['cobalt-inbox']);
   });
 
-  it('splits typed inboxes into Business and Projects sections, each with its own company folders', () => {
+  it('splits typed inboxes into Business (plain domains) and Projects (company folders) sections', () => {
     renderList({ tags: { m: 'business', p: 'project', q: 'business' }, companies: { m: 'Synapse', p: 'Synapse' } });
     expect(layout()).toEqual({
-      mailbox_section_business: { Synapse: ['cobalt-inbox'], _: ['sayit-inbox'] },
+      mailbox_section_business: ['cobalt-inbox', 'sayit-inbox'],
       mailbox_section_project: { Synapse: ['ratify-inbox'] },
     });
     expect(screen.getAllByTestId('type-section').map((s) => s.dataset.section)).toEqual(['business', 'project']);
