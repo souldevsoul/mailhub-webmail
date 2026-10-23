@@ -3975,6 +3975,36 @@ export class JMAPClient implements IJMAPClient {
     throw new Error('Failed to save draft');
   }
 
+  /**
+   * The account a message from `fromEmail` is filed in: the account named after
+   * the address, else a shared account with an identity for it (a domain
+   * inbox's alias such as info@, whose account is named inbox@), else the
+   * user's own. Without the identity lookup, mail sent as an alias landed in
+   * the sender's personal Sent instead of the domain inbox's.
+   */
+  private async findSendAccountId(fromEmail?: string): Promise<string> {
+    if (!fromEmail) return this.accountId;
+    const email = parseRecipientString(fromEmail).email.toLowerCase();
+    const named = Object.keys(this.accounts).find(id => this.accounts[id]?.name?.toLowerCase() === email);
+    if (named) return named;
+    const shared = Object.keys(this.accounts).filter(id =>
+      id !== this.accountId && !this.accounts[id]?.isReadOnly
+      && !!this.accounts[id]?.accountCapabilities?.['urn:ietf:params:jmap:submission']);
+    for (const group of batched(shared, this.getMaxCallsInRequest())) {
+      try {
+        const response = await this.request(group.map((id): JMAPMethodCall => ["Identity/get", { accountId: id, properties: ["email"] }, id]));
+        for (const [name, result, callId] of response.methodResponses ?? []) {
+          if (name !== "Identity/get") continue;
+          const list = ((result as { list?: Identity[] }).list ?? []);
+          if (list.some(identity => identity.email?.toLowerCase() === email)) return callId;
+        }
+      } catch (error) {
+        console.error('Failed to look up shared identities:', error);
+      }
+    }
+    return this.accountId;
+  }
+
   async sendEmail(
     to: string[],
     subject: string,
@@ -3995,9 +4025,7 @@ export class JMAPClient implements IJMAPClient {
   ): Promise<SendEmailResult> {
     const holdForSeconds = delayedUntil ? this.validateDelayedUntil(delayedUntil) : undefined;
     const emailId = `send-${Date.now()}`;
-    const targetAccountId = (fromEmail && Object.keys(this.accounts).find(id =>
-      this.accounts[id]?.name?.toLowerCase() === fromEmail.toLowerCase()
-    )) || this.accountId;
+    const targetAccountId = await this.findSendAccountId(fromEmail);
     const mboxResp = await this.request([
       ["Mailbox/get", { accountId: targetAccountId }, "0"]
     ]);
