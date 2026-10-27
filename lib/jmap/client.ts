@@ -926,6 +926,18 @@ function sanitizeIdentityDisplayName(name: string | undefined | null): string {
   return sanitizeDisplayName(name);
 }
 
+// MailHub: the name on a sent message is the address it is sent from, unless
+// the sender set a real name. A missing name, or one that is another address
+// (a user without a full name sends under their login, e.g. admin@<hub>),
+// must not reach the recipient, so it becomes the From address.
+export function senderDisplayName(name: string | undefined | null, fromEmail: string): string {
+  const sanitized = sanitizeIdentityDisplayName(name);
+  if (!sanitized || (sanitized.includes('@') && sanitized.toLowerCase() !== fromEmail.toLowerCase())) {
+    return fromEmail;
+  }
+  return sanitized;
+}
+
 function normalizeEnvelopeRecipients(recipients?: Array<string | EmailAddress>): Array<{ email: string }> {
   // The JMAP envelope rcptTo/mailFrom take a bare addr-spec, not an RFC 5322
   // mailbox. `to`/`cc`/`bcc` may arrive as "Name <addr>"; strip the display
@@ -3889,7 +3901,7 @@ export class JMAPClient implements IJMAPClient {
       references?: string[];
     }
 
-    const sanitizedFromName = sanitizeIdentityDisplayName(fromName);
+    const sanitizedFromName = senderDisplayName(fromName, parseRecipientString(fromEmail || this.username).email);
     // A reply draft keeps its thread: re-opened or re-sent after Undo, it has
     // nothing else to rebuild In-Reply-To / References from.
     const draftInReplyTo = inReplyTo?.map(stripMessageIdBrackets).filter(Boolean);
@@ -4086,7 +4098,7 @@ export class JMAPClient implements IJMAPClient {
     const normalizedInReplyTo = inReplyTo?.map(stripMessageIdBrackets).filter(Boolean);
     const normalizedReferences = references?.map(stripMessageIdBrackets).filter(Boolean);
 
-    const sanitizedFromName = sanitizeIdentityDisplayName(fromName);
+    const sanitizedFromName = senderDisplayName(fromName, parseRecipientString(fromEmail || this.username).email);
     // Always create a new email with the final body content
     const emailCreate: Record<string, unknown> = {
       from: [{ ...(sanitizedFromName ? { name: sanitizedFromName } : {}), email: fromEmail || this.username }],
