@@ -12,6 +12,8 @@ export interface InboxDirectory {
   tags: Record<string, MailboxTag>;
   companies: Record<string, string>;
   addresses: Record<string, MailboxAddresses>;
+  /** Login addresses of signed-in accounts: personal mailboxes, never a domain inbox. */
+  personal?: string[];
 }
 
 /** One side of the check: a sender, or the inbox the user is working in. */
@@ -41,6 +43,7 @@ export const domainOf = (email: string | null | undefined): string => {
 export function findInboxAccount(email: string | null | undefined, directory: InboxDirectory): string | null {
   const address = normalizeAddress(email);
   if (!address) return null;
+  if (directory.personal?.some((p) => normalizeAddress(p) === address)) return null;
   const entries = Object.entries(directory.addresses);
   const exact = entries.find(([, a]) => a.addresses.some((x) => normalizeAddress(x) === address));
   if (exact) return exact[0];

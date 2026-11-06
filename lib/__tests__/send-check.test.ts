@@ -27,6 +27,11 @@ describe('findInboxAccount', () => {
   it('falls back to the inbox of the same domain for catch-all addresses', () => {
     expect(findInboxAccount('sales@traffixora.com', directory)).toBe('tx');
   });
+  it('never takes a signed-in login address for the inbox of its domain', () => {
+    const withLogin = { ...directory, personal: ['Sales@Traffixora.com'] };
+    expect(findInboxAccount('sales@traffixora.com', withLogin)).toBeNull();
+    expect(findInboxAccount('info@traffixora.com', withLogin)).toBe('tx');
+  });
   it('returns null for a personal login address', () => {
     expect(findInboxAccount('admin2@pact.email', directory)).toBeNull();
     expect(findInboxAccount('', directory)).toBeNull();

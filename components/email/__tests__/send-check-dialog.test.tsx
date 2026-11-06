@@ -4,6 +4,7 @@ import React from 'react';
 import { SendCheckDialog } from '../send-check-dialog';
 import { useSendCheckStore, type SendCheckRequest } from '@/stores/send-check-store';
 import { useMailboxTagStore } from '@/stores/mailbox-tag-store';
+import { useAccountStore } from '@/stores/account-store';
 import { formatToday } from '@/lib/send-check';
 
 type Ask = (request: SendCheckRequest) => Promise<boolean>;
@@ -74,6 +75,15 @@ describe('send check dialog (MailHub)', () => {
     ask({ from: 'admin2@pact.email', to: ['client@example.com'] });
 
     expect(screen.getByRole('alert')).toHaveTextContent('not_company_inbox');
+  });
+
+  it('a personal login on the same domain as a company inbox is still personal, and flagged', () => {
+    useAccountStore.setState({ accounts: [{ id: 'a1', email: 'sales@traffixora.com' }] as never });
+    render(<SendCheckDialog />);
+    ask({ from: 'sales@traffixora.com', to: ['client@example.com'], contextAddress: 'inbox@traffixora.com' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('mismatch');
+    useAccountStore.setState({ accounts: [] });
   });
 
   it('going back resolves false, and the next check starts empty', async () => {

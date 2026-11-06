@@ -10,6 +10,7 @@ import { describeAddress, formatToday, matchesAddress, matchesToday, sameCompany
 import { MAILBOX_TAG_STYLE } from "@/components/layout/sidebar-domain-inboxes";
 import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
 import { useSendCheckStore } from "@/stores/send-check-store";
+import { useAccountStore } from "@/stores/account-store";
 
 function InboxLine({ info, label }: { info: InboxInfo; label: string }) {
   const t = useTranslations("send_check");
@@ -48,7 +49,11 @@ export function SendCheckDialog() {
     setTypedFrom("");
   }, [pending]);
 
-  const directory = useMemo(() => ({ tags, companies, addresses }), [tags, companies, addresses]);
+  const accounts = useAccountStore((s) => s.accounts);
+  const directory = useMemo(
+    () => ({ tags, companies, addresses, personal: accounts.map((a) => a.email) }),
+    [tags, companies, addresses, accounts],
+  );
   const sender = useMemo(() => describeAddress(pending?.from, directory), [pending, directory]);
   const context = useMemo(
     () => (pending?.contextAddress ? describeAddress(pending.contextAddress, directory) : null),
@@ -119,13 +124,13 @@ export function SendCheckDialog() {
           <dl className="space-y-1 text-sm">
             {recipients.filter(([, list]) => list && list.length > 0).map(([label, list]) => (
               <div key={label} className="flex gap-2">
-                <dt className="w-10 shrink-0 text-muted-foreground">{label}</dt>
+                <dt className="w-16 shrink-0 text-muted-foreground">{label}</dt>
                 <dd className="break-all text-foreground">{list!.join(", ")}</dd>
               </div>
             ))}
             {pending.subject !== undefined && (
               <div className="flex gap-2">
-                <dt className="w-10 shrink-0 text-muted-foreground">{t("subject")}</dt>
+                <dt className="w-16 shrink-0 text-muted-foreground">{t("subject")}</dt>
                 <dd className="break-all text-foreground">{pending.subject || t("no_subject")}</dd>
               </div>
             )}
