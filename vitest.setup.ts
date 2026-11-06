@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
+import { useSendCheckStore } from '@/stores/send-check-store';
 
 // jsdom does not implement matchMedia; components that read media queries
 // (e.g. responsive layout hooks) call it during render. Provide a minimal
@@ -66,6 +67,14 @@ vi.mock('@/i18n/navigation', () => ({
   usePathname: () => '/en',
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
+
+// MailHub: every send waits on the "check before sending" dialog. Tests that are
+// not about that check confirm it at once; send-check tests put the real one
+// back with useSendCheckStore.setState({ ask: realSendCheckAsk }).
+(globalThis as { realSendCheckAsk?: unknown }).realSendCheckAsk = useSendCheckStore.getState().ask;
+beforeEach(() => {
+  useSendCheckStore.setState({ pending: null, ask: async () => true });
+});
 
 afterEach(() => {
   cleanup();

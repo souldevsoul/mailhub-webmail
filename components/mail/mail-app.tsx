@@ -1,6 +1,9 @@
 "use client";
 
 import { useMailboxTagsLoader } from "@/hooks/use-mailbox-tags-loader";
+import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
+import { useSendCheckStore } from "@/stores/send-check-store";
+import { findInboxAccount } from "@/lib/send-check";
 import { useEffect, useLayoutEffect, useState, useRef, useMemo, useCallback, useId } from "react";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -3487,6 +3490,22 @@ export function MailApp({ linkSegments: routeSegments }: MailAppProps = {}) {
     const finalHtmlBody = signatureIdentity?.htmlSignature?.trim()
       ? appendHtmlSignature(`<div>${escapedBody}</div>`, signatureIdentity, { separator })
       : undefined;
+
+    // MailHub: the same check before sending as the full composer. Going back
+    // throws, so the quick reply box keeps the text.
+    {
+      const tagState = useMailboxTagStore.getState();
+      const original = [...(selectedEmail.to ?? []), ...(selectedEmail.cc ?? []), ...(selectedEmail.bcc ?? [])]
+        .map((r) => r?.email)
+        .find((email) => !!email && !!findInboxAccount(email, tagState));
+      const confirmed = await useSendCheckStore.getState().ask({
+        from: headerFromEmail ?? '',
+        to: recipients,
+        subject: buildReplySubject(selectedEmail.subject || "(no subject)", t('email_composer.prefix.reply')),
+        contextAddress: original ?? null,
+      });
+      if (!confirmed) throw new Error('Send cancelled at the check');
+    }
 
     const originalEmailId = selectedEmail.id;
     const sendDelaySeconds = useSettingsStore.getState().sendDelaySeconds;

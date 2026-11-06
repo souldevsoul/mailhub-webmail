@@ -5,6 +5,7 @@ import { CalendarAlertProvider } from "@/components/providers/calendar-alert-pro
 import { EmbeddedBridgeProvider } from "@/components/providers/embedded-bridge-provider";
 import { RateLimitToastProvider } from "@/components/providers/rate-limit-toast-provider";
 import { TourProvider } from "@/components/tour/tour-provider";
+import { SendCheckDialog } from "@/components/email/send-check-dialog";
 import { ProtocolLaunchHandlerProvider } from "@/components/protocol/protocol-launch-handler-provider";
 import { ProInterfaceRedirect } from "@/components/pro/pro-interface-redirect";
 import { ImpersonationReconciler } from "@/components/impersonation/impersonation-reconciler";
@@ -59,6 +60,7 @@ export default async function LocaleLayout({
                   {children}
                   <PluginDialogHost />
                   <QuickRuleHost />
+                  <SendCheckDialog />
                   <PluginConsentDialog />
                   <PluginOAuthCallbackListener />
                   <PWAInstallPrompt />

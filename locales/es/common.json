@@ -4009,5 +4009,23 @@
     "preview_empty": "Selecciona un resultado para previsualizarlo",
     "open_full": "Abrir",
     "view_label": "Vista"
+  },
+  "send_check": {
+    "title": "Check before sending",
+    "sending_as": "Sending as",
+    "tag_business": "Business",
+    "tag_project": "Project",
+    "mismatch": "You are working in {working} but this goes out as {sending}. Check the From address.",
+    "not_company_inbox": "This address is not a company inbox. Check the From address.",
+    "to": "To",
+    "cc": "Cc",
+    "bcc": "Bcc",
+    "subject": "Subject",
+    "no_subject": "(no subject)",
+    "type_date": "Type today's date ({example})",
+    "type_from": "Type the From address shown above",
+    "no_paste": "Type it by hand: pasting is off on purpose.",
+    "back": "Back to the message",
+    "send": "Send"
   }
 }

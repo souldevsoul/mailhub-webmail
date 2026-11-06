@@ -78,6 +78,9 @@ import type { EmailTemplate } from "@/lib/template-types";
 import { appendPlainTextSignature, getPlainTextSignature, plainTextBodyHasSignature, plainTextBodyWithoutSignature } from "@/lib/signature-utils";
 import { wantsSignatureSeparator } from "@/lib/signature-delimiter";
 import { findComposeIdentityId, findDraftIdentityId, findReplyIdentityId, resolveReplyFrom } from "@/lib/reply-identity";
+import { findInboxAccount, mainAddressOf } from "@/lib/send-check";
+import { useSendCheckStore } from "@/stores/send-check-store";
+import { useMailboxTagStore } from "@/stores/mailbox-tag-store";
 import { buildReplyRecipients, isSelfSent } from "@/lib/reply-recipients";
 import { computeReplyThreadingHeaders, type ReplyThreadingHeaders } from "@/lib/email-threading";
 import { RecipientsRejectedError, RequestTimeoutError, ScheduleTooLateError, SendUnconfirmedError, formatRejectedRecipients } from "@/lib/jmap/client";
@@ -961,6 +964,17 @@ export function EmailComposer({
     // viewing info@ sends as info@. Reply/forward fall through to the
     // recipient-based resolution below.
     if (mode === 'compose') {
+      // MailHub: a message started inside a shared domain inbox always goes
+      // out as that inbox's main address (info@ first), whatever the setting:
+      // mail must never leave from another company than the one being worked in.
+      const tagState = useMailboxTagStore.getState();
+      const inboxMain = mainAddressOf(composeFromAccountEmail, tagState);
+      if (inboxMain) {
+        const inboxIdentityId = findComposeIdentityId(identities, inboxMain)
+          ?? findComposeIdentityId(identities, composeFromAccountEmail);
+        if (inboxIdentityId) setSelectedIdentityId(inboxIdentityId);
+        return;
+      }
       // Still gated. `composeFromAccountEmail` falls back to `AccountEntry.email`,
       // which is written once at first login, so resolving it unconditionally
       // would override a user-chosen default sender identity (#507) on every
@@ -2509,6 +2523,26 @@ export function EmailComposer({
       }
     }
 
+    // MailHub: check before sending - which company this goes out as, to whom,
+    // and today's date and the From address typed by hand.
+    {
+      const overrideOn = fromOverrideEnabled && fromOverrideEmail.trim().length > 0;
+      const checkFrom = overrideOn ? fromOverrideEmail.trim() : (currentIdentity?.email ?? '');
+      const tagState = useMailboxTagStore.getState();
+      const original = [...(replyTo?.to ?? []), ...(replyTo?.cc ?? []), ...(replyTo?.bcc ?? [])]
+        .map((r) => r?.email)
+        .find((email) => !!email && !!findInboxAccount(email, tagState));
+      const confirmed = await useSendCheckStore.getState().ask({
+        from: checkFrom,
+        to: toAddresses.map((r) => r.email),
+        cc: ccAddresses.map((r) => r.email),
+        bcc: bccAddresses.map((r) => r.email),
+        subject,
+        contextAddress: (mode !== 'compose' ? original : undefined) ?? composeFromAccountEmail ?? null,
+      });
+      if (!confirmed) return;
+    }
+
     // Past every "don't send" early return - mark the send in flight so a
     // second click is a no-op until this resolves (reset in the finally below).
     isSendingRef.current = true;
@@ -2956,7 +2990,9 @@ export function EmailComposer({
       showScheduleDialog ||
       showAttachmentWarning ||
       showEmptySubjectWarning ||
-      showCloseDialog
+      showCloseDialog ||
+      // MailHub: the check before sending handles its own keys.
+      useSendCheckStore.getState().pending
     ) return;
 
     if (isPlainEscape) {
