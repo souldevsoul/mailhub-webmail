@@ -4510,6 +4510,9 @@ export class JMAPClient implements IJMAPClient {
     const emailId = `imip-reply-${Date.now()}`;
     const emailCreate: Record<string, unknown> = {
       from: [{ name: opts.attendeeName || undefined, email: opts.attendeeEmail }],
+      // Our own Message-ID on the sender's domain: one the server makes up names the hub, and the
+      // gateway rewriting it after signing breaks DKIM.
+      messageId: [generateMessageId(opts.attendeeEmail)],
       to: [{ name: opts.organizerName || undefined, email: opts.organizerEmail }],
       subject,
       keywords: { "$seen": true, "$draft": true },
@@ -4702,6 +4705,9 @@ export class JMAPClient implements IJMAPClient {
     const emailId = `imip-invite-${Date.now()}`;
     const emailCreate: Record<string, unknown> = {
       from: [{ name: organizerName || undefined, email: organizerEmail }],
+      // Our own Message-ID on the sender's domain: one the server makes up names the hub, and the
+      // gateway rewriting it after signing breaks DKIM.
+      messageId: [generateMessageId(organizerEmail)],
       to: toAddresses,
       subject,
       keywords: { "$seen": true, "$draft": true },
@@ -4858,6 +4864,9 @@ export class JMAPClient implements IJMAPClient {
     const emailId = `imip-cancel-${Date.now()}`;
     const emailCreate: Record<string, unknown> = {
       from: [{ name: organizerName || undefined, email: organizerEmail }],
+      // Our own Message-ID on the sender's domain: one the server makes up names the hub, and the
+      // gateway rewriting it after signing breaks DKIM.
+      messageId: [generateMessageId(organizerEmail)],
       to: toAddresses,
       subject,
       keywords: { "$seen": true, "$draft": true },
