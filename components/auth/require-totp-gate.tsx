@@ -61,10 +61,35 @@ interface SetupProps {
   onSignOut: () => void;
 }
 
+// One setup secret per account for the whole setup, across re-renders, remounts and reloads. The issuer
+// (app name) arrives with the config a moment after first paint; when the secret was rebuilt from it, the
+// QR silently changed under a user who had already scanned it and every code was "invalid".
+const SETUP_KEY_PREFIX = "mailhub-totp-setup:";
+const setupSecrets = new Map<string, string>();
+
+export function setupSecret(username: string): OTPAuth.Secret {
+  const key = SETUP_KEY_PREFIX + (username || "account");
+  let base32 = setupSecrets.get(key);
+  if (!base32) {
+    try { base32 = sessionStorage.getItem(key) ?? undefined; } catch { /* storage blocked */ }
+  }
+  if (!base32 || !/^[A-Z2-7]{16,}$/.test(base32)) base32 = new OTPAuth.Secret({ size: 20 }).base32;
+  setupSecrets.set(key, base32);
+  try { sessionStorage.setItem(key, base32); } catch { /* storage blocked: the in-memory copy still holds */ }
+  return OTPAuth.Secret.fromBase32(base32);
+}
+
+function forgetSetupSecret(username: string): void {
+  const key = SETUP_KEY_PREFIX + (username || "account");
+  setupSecrets.delete(key);
+  try { sessionStorage.removeItem(key); } catch { /* ignore */ }
+}
+
 function TotpSetupScreen({ t, username, issuer, isSaving, enableTotp, onSignOut }: SetupProps) {
+  const secret = useMemo(() => setupSecret(username), [username]);
   const totp = useMemo(
-    () => new OTPAuth.TOTP({ issuer, label: username || "account", algorithm: "SHA1", digits: 6, period: 30, secret: new OTPAuth.Secret({ size: 20 }) }),
-    [issuer, username],
+    () => new OTPAuth.TOTP({ issuer, label: username || "account", algorithm: "SHA1", digits: 6, period: 30, secret }),
+    [issuer, username, secret],
   );
   const otpUrl = useMemo(() => totp.toString(), [totp]);
   const [qr, setQr] = useState<string | null>(null);
@@ -87,6 +112,7 @@ function TotpSetupScreen({ t, username, issuer, isSaving, enableTotp, onSignOut 
     if (totp.validate({ token, window: 1 }) === null) return setError(t("code_invalid"));
     try {
       await enableTotp(password, otpUrl, token);
+      forgetSetupSecret(username);
       toast.success(t("enabled"));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("enable_error"));

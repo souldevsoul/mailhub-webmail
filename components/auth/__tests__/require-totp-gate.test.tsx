@@ -96,4 +96,20 @@ describe('RequireTotpGate', () => {
     expect(enableTotp).toHaveBeenCalled();
     expect(screen.getByTestId('totp-gate')).toBeInTheDocument();
   });
+
+  it('keeps the same secret when the app name arrives after the QR was shown', async () => {
+    const { setupSecret } = await import('../require-totp-gate');
+    const before = setupSecret('late@pact.email').base32;
+    expect(setupSecret('late@pact.email').base32).toBe(before);
+    expect(setupSecret('other@pact.email').base32).not.toBe(before);
+  });
+
+  it('shows the same key after the screen remounts', async () => {
+    const first = render(<RequireTotpGate />);
+    const key1 = (await screen.findByTestId('totp-gate-key')).textContent;
+    first.unmount();
+    render(<RequireTotpGate />);
+    const key2 = (await screen.findByTestId('totp-gate-key')).textContent;
+    expect(key2).toBe(key1);
+  });
 });
