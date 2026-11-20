@@ -98,13 +98,13 @@ function TotpSetupScreen({ t, username, issuer, isSaving, enableTotp, onSignOut 
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-start sm:items-center justify-center overflow-y-auto bg-background/95 backdrop-blur-sm px-4 py-8"
+      className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-background/95 backdrop-blur-sm px-4 py-4 sm:py-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="totp-gate-title"
       data-testid="totp-gate"
     >
-      <form onSubmit={submit} className="w-full max-w-md rounded-xl border border-border bg-background shadow-xl p-6 space-y-5">
+      <form onSubmit={submit} className="my-auto w-full max-w-md sm:max-w-lg rounded-xl border border-border bg-background shadow-xl p-5 space-y-3">
         <div className="flex items-start gap-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
             <Shield className="h-5 w-5" />
@@ -118,15 +118,17 @@ function TotpSetupScreen({ t, username, issuer, isSaving, enableTotp, onSignOut 
 
         <div className="space-y-3">
           <p className="text-sm text-foreground">{t("gate_step_scan")}</p>
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:gap-4">
             {qr ? (
-              <img src={qr} width={200} height={200} alt="" className="rounded-md border border-border bg-white p-2" data-testid="totp-gate-qr" />
+              <img src={qr} width={160} height={160} alt="" className="h-40 w-40 shrink-0 rounded-md border border-border bg-white p-2 sm:h-32 sm:w-32 sm:p-1.5" data-testid="totp-gate-qr" />
             ) : (
-              <div className="grid h-[200px] w-[200px] place-items-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              <div className="grid h-40 w-40 shrink-0 place-items-center sm:h-32 sm:w-32"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
             )}
+            <div className="w-full min-w-0 space-y-2">
+              <p className="text-xs text-muted-foreground">{t("gate_step_manual")}</p>
+              <code className="block select-all break-words rounded-md bg-muted px-3 py-2 text-center font-mono text-sm tracking-wider" data-testid="totp-gate-key">{manualKey}</code>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">{t("gate_step_manual")}</p>
-          <code className="block select-all break-all rounded-md bg-muted px-3 py-2 text-center font-mono text-sm tracking-wider" data-testid="totp-gate-key">{manualKey}</code>
         </div>
 
         <div className="space-y-3">
