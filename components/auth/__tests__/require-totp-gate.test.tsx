@@ -112,4 +112,25 @@ describe('RequireTotpGate', () => {
     const key2 = (await screen.findByTestId('totp-gate-key')).textContent;
     expect(key2).toBe(key1);
   });
+
+  it('checks the code by the server clock when this computer clock is off', async () => {
+    const realNow = Date.now();
+    const fetchMock = vi.fn().mockResolvedValue({ headers: new Headers({ date: new Date(realNow).toUTCString() }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow - 5 * 60 * 1000); // computer 5 min slow
+    try {
+      render(<RequireTotpGate />);
+      const key = (await screen.findByTestId('totp-gate-key')).textContent!.replace(/\s/g, '');
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const OTPAuth = await import('otpauth');
+      const code = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(key) }).generate({ timestamp: realNow });
+      fireEvent.change(screen.getByTestId('totp-gate-code'), { target: { value: code } });
+      fireEvent.change(screen.getByTestId('totp-gate-password'), { target: { value: 'pw' } });
+      fireEvent.click(screen.getByTestId('totp-gate-submit'));
+      await waitFor(() => expect(useAccountSecurityStore.getState().enableTotp).toHaveBeenCalled());
+    } finally {
+      nowSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
 });

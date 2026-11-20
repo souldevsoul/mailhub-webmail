@@ -1832,7 +1832,7 @@
         "gate_sign_out": "Sign out",
         "gate_apps_note": "After this, mail apps on your phone or computer need an app password from Settings > Security.",
         "gate_loading": "Checking your account security...",
-        "code_invalid": "Invalid verification code. Check your authenticator app and try again."
+        "code_invalid": "That code does not match. Make sure your phone sets its time automatically, then enter the newest code from your authenticator app."
       },
       "app_passwords": {
         "title": "App Passwords",

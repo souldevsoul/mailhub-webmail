@@ -79,6 +79,22 @@ export function setupSecret(username: string): OTPAuth.Secret {
   return OTPAuth.Secret.fromBase32(base32);
 }
 
+/** Server time minus this computer's time, from the Date header of a fresh request; null if unknown. */
+export async function serverClockOffset(): Promise<number | null> {
+  try {
+    const sentAt = Date.now();
+    const res = await fetch(window.location.href, { method: "HEAD", cache: "no-store", credentials: "same-origin" });
+    const date = res.headers.get("date");
+    if (!date) return null;
+    const server = Date.parse(date);
+    if (Number.isNaN(server)) return null;
+    // The header has one-second resolution and was stamped mid-request.
+    return server + 500 - (sentAt + Date.now()) / 2;
+  } catch {
+    return null;
+  }
+}
+
 function forgetSetupSecret(username: string): void {
   const key = SETUP_KEY_PREFIX + (username || "account");
   setupSecrets.delete(key);
@@ -96,6 +112,15 @@ function TotpSetupScreen({ t, username, issuer, isSaving, enableTotp, onSignOut 
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The phone's code is checked by the server's clock at every sign-in, so check it here by the
+  // same clock: this computer's clock may be off, which made correct codes look invalid.
+  const [serverOffsetMs, setServerOffsetMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    serverClockOffset().then((offset) => { if (!cancelled) setServerOffsetMs(offset); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,7 +134,8 @@ function TotpSetupScreen({ t, username, issuer, isSaving, enableTotp, onSignOut 
     const token = code.replace(/\s+/g, "");
     if (!token) return setError(t("code_required"));
     if (!password) return setError(t("password_required"));
-    if (totp.validate({ token, window: 1 }) === null) return setError(t("code_invalid"));
+    const offset = serverOffsetMs ?? (await serverClockOffset());
+    if (totp.validate({ token, window: 1, timestamp: Date.now() + (offset ?? 0) }) === null) return setError(t("code_invalid"));
     try {
       await enableTotp(password, otpUrl, token);
       forgetSetupSecret(username);
